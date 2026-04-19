@@ -47,6 +47,192 @@ ${footer ? `\n    <div${footerId ? ` id="${footerId}"` : ''} class="pt-modal-foo
 }
 
 /**
+ * Build a generic "Open File" dialog with File / URL / Example tabs.
+ *
+ * All element IDs are prefixed with `opts.prefix` so multiple dialogs can
+ * coexist on the same page.  Tabs are opt-in: set `file`, `url`, and/or
+ * `example` to true (or an options object) to include them.
+ *
+ * @param {object}  opts
+ * @param {string}  opts.prefix      - ID prefix, e.g. 'tree' → #tree-open-modal
+ * @param {string}  opts.title       - modal title, e.g. 'Open Tree File'
+ * @param {string}  [opts.icon]      - Bootstrap-icon name (default 'folder2-open')
+ *
+ * File tab (drag-and-drop + file picker):
+ * @param {boolean|object} [opts.file]        - show File tab (default true)
+ * @param {string}  [opts.file.accept]        - accept attribute for <input type="file">
+ * @param {string}  [opts.file.hint]          - small hint text below the drop area
+ * @param {string}  [opts.file.dropText]      - main text inside the drop zone
+ *
+ * URL tab:
+ * @param {boolean|object} [opts.url]         - show URL tab
+ * @param {string}  [opts.url.label]          - label above the URL input
+ * @param {string}  [opts.url.placeholder]    - placeholder for the URL input
+ *
+ * Example tab:
+ * @param {boolean|object} [opts.example]     - show Example tab
+ * @param {string}  [opts.example.icon]       - Bootstrap-icon for tab button
+ * @param {string}  [opts.example.label]      - tab button label
+ *
+ * @returns {string} HTML string
+ */
+function buildOpenFileDialogHTML(opts = {}) {
+  const p     = opts.prefix || 'file';
+  const title = opts.title  || 'Open File';
+  const icon  = opts.icon   || 'folder2-open';
+
+  const showFile    = opts.file    !== false;
+  const showUrl     = opts.url     === true || (typeof opts.url === 'object');
+  const showExample = opts.example === true || (typeof opts.example === 'object');
+
+  const fileOpts = typeof opts.file === 'object' ? opts.file : {};
+  const urlOpts  = typeof opts.url  === 'object' ? opts.url  : {};
+  const exOpts   = typeof opts.example === 'object' ? opts.example : {};
+
+  const accept         = fileOpts.accept      || '';
+  const dropText       = fileOpts.dropText    || 'Drag and drop your file here';
+  const hint           = fileOpts.hint        || '';
+  const urlLabel       = urlOpts.label        || 'File URL';
+  const urlPlaceholder = urlOpts.placeholder  || 'https://example.com/file';
+  const exIcon         = exOpts.icon          || 'database';
+  const exLabel        = exOpts.label         || 'Example';
+
+  // Tab buttons
+  const tabs = [];
+  if (showFile)    tabs.push(`<button class="pt-tab-btn active" data-tab="file"><i class="bi bi-folder2-open me-1"></i>File</button>`);
+  if (showUrl)     tabs.push(`<button class="pt-tab-btn${tabs.length === 0 ? ' active' : ''}" data-tab="url"><i class="bi bi-link-45deg me-1"></i>URL</button>`);
+  if (showExample) tabs.push(`<button class="pt-tab-btn${tabs.length === 0 ? ' active' : ''}" data-tab="example"><i class="bi bi-${exIcon} me-1"></i>${exLabel}</button>`);
+
+  const needTabs = tabs.length > 1;
+
+  // File panel
+  const filePanel = showFile ? `\
+      <div class="pt-tab-panel active" id="${p}-tab-panel-file">
+        <div id="${p}-drop-zone" class="pt-drop-zone">
+          <div class="pt-drop-icon"><i class="bi bi-file-earmark-arrow-down"></i></div>
+          <p>${dropText}</p>${hint ? `\n          <p class="text-secondary" style="font-size:0.8rem;margin-bottom:1rem">${hint}</p>` : ''}
+          <input type="file" id="${p}-file-input"${accept ? ` accept="${accept}"` : ''} style="position:absolute;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none">
+          <button class="btn btn-sm btn-outline-primary" id="${p}-btn-file-choose"><i class="bi bi-folder2-open me-1"></i>Choose File</button>
+        </div>
+      </div>` : '';
+
+  // URL panel
+  const urlPanel = showUrl ? `\
+      <div class="pt-tab-panel${!showFile ? ' active' : ''}" id="${p}-tab-panel-url">
+        <label class="form-label">${urlLabel}</label>
+        <input type="url" class="pt-modal-url-input" id="${p}-url-input" placeholder="${urlPlaceholder}" />
+        <div style="text-align:center">
+          <button class="btn btn-sm btn-outline-primary" id="${p}-btn-load-url"><i class="bi bi-cloud-download me-1"></i>Load from URL</button>
+        </div>
+      </div>` : '';
+
+  // Example panel
+  const examplePanel = showExample ? `\
+      <div class="pt-tab-panel${!showFile && !showUrl ? ' active' : ''}" id="${p}-tab-panel-example">
+        <div id="${p}-example-list" class="pt-example-list"></div>
+      </div>` : '';
+
+  // Assemble body
+  const body = `${needTabs ? `\n      <div class="pt-tabs">${tabs.join('')}</div>` : ''}
+${filePanel}${urlPanel}${examplePanel}
+      <div class="pt-modal-loading" id="${p}-modal-loading" style="display:none"><div class="pt-spinner"></div>Loading\u2026</div>
+      <div class="pt-modal-error" id="${p}-modal-error" style="display:none"></div>`;
+
+  return buildModalHTML({
+    overlayId: `${p}-open-modal`,
+    title,
+    icon,
+    closeId: `${p}-btn-modal-close`,
+    body,
+  });
+}
+
+/**
+ * Wire up an open-file dialog built by buildOpenFileDialogHTML().
+ *
+ * @param {Element|Document} root - scope element
+ * @param {object}  opts
+ * @param {string}  opts.prefix         - same prefix used in buildOpenFileDialogHTML
+ * @param {Function} opts.onFile        - async (file: File) => void — called when a file is chosen/dropped
+ * @param {Function} [opts.onUrl]       - async (url: string) => void — called when URL is submitted
+ * @returns {{ open: Function, close: Function, setError: Function, setLoading: Function, overlay: Element }}
+ */
+function initOpenFileDialog(root, opts = {}) {
+  const _root = root === document ? document : root;
+  const $ = id => _root.querySelector('#' + id);
+  const p = opts.prefix || 'file';
+
+  const overlay   = $(`${p}-open-modal`);
+  const btnClose  = $(`${p}-btn-modal-close`);
+  const dropZone  = $(`${p}-drop-zone`);
+  const fileInput = $(`${p}-file-input`);
+  const btnChoose = $(`${p}-btn-file-choose`);
+  const urlInput  = $(`${p}-url-input`);
+  const btnUrl    = $(`${p}-btn-load-url`);
+  const loadingEl = $(`${p}-modal-loading`);
+  const errorEl   = $(`${p}-modal-error`);
+
+  function open()  { setError(null); setLoading(false); overlay?.classList.add('open'); }
+  function close() { overlay?.classList.remove('open'); }
+
+  function setError(msg) {
+    if (!errorEl) return;
+    if (msg) { errorEl.textContent = msg; errorEl.style.display = 'block'; }
+    else     { errorEl.style.display = 'none'; }
+  }
+
+  function setLoading(on) {
+    if (loadingEl) loadingEl.style.display = on ? 'block' : 'none';
+    overlay?.querySelectorAll('.pt-modal-body button, .pt-tab-btn').forEach(b => {
+      if (b !== btnClose) b.disabled = on;
+    });
+  }
+
+  // Tab switching
+  if (overlay) {
+    overlay.querySelectorAll('.pt-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        overlay.querySelectorAll('.pt-tab-btn').forEach(b => b.classList.remove('active'));
+        overlay.querySelectorAll('.pt-tab-panel').forEach(pnl => pnl.classList.remove('active'));
+        btn.classList.add('active');
+        const panel = $(`${p}-tab-panel-${btn.dataset.tab}`);
+        if (panel) panel.classList.add('active');
+      });
+    });
+  }
+
+  // Close button
+  btnClose?.addEventListener('click', close);
+
+  // File tab: drag-drop + choose
+  if (dropZone) {
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file && opts.onFile) opts.onFile(file);
+    });
+  }
+  btnChoose?.addEventListener('click', () => fileInput?.click());
+  fileInput?.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (file && opts.onFile) opts.onFile(file);
+    fileInput.value = '';
+  });
+
+  // URL tab
+  btnUrl?.addEventListener('click', () => {
+    const url = urlInput?.value.trim();
+    if (!url) { setError('Please enter a URL.'); return; }
+    if (opts.onUrl) opts.onUrl(url);
+  });
+
+  return { open, close, setError, setLoading, overlay };
+}
+
+/**
  * Build the standard error / confirm / prompt dialog HTML.
  * These overlays are required by showConfirmDialog(), showAlertDialog(),
  * and showPromptDialog().
