@@ -213,6 +213,10 @@ export function createAnnotImporter({ getGraph, onApply, isTip }) {
         </div>
       </div>
 
+      <div class="imp-section" id="imp-match-count-section">
+        <div id="imp-match-count" style="font-size:0.82rem;padding:0.4rem 0.6rem;border-radius:4px;background:var(--pt-bg-secondary, #f0f0f0);color:var(--pt-text-bright)"></div>
+      </div>
+
       ${exHtml}
 
       <div class="imp-section">
@@ -237,6 +241,77 @@ export function createAnnotImporter({ getGraph, onApply, isTip }) {
       <button id="imp-cancel-btn" class="btn btn-sm btn-outline-secondary">Cancel</button>
       <button id="imp-apply-btn" class="btn btn-sm btn-primary">Import &#x2192;</button>`;
 
+    // ── Match counting helper ──────────────────────────────────────────────
+    function _countMatches(colIdx, mode, fieldIdx) {
+      const colName = headers[colIdx];
+      const rowLookup = new Set();
+      for (const row of rows) {
+        const key = (row[colName] ?? '').trim();
+        if (key) rowLookup.add(key);
+      }
+      let matched = 0;
+      for (const node of tips) {
+        const label    = node.name ?? '';
+        const matchKey = mode === 'field'
+          ? (label.split('|')[fieldIdx] ?? '').trim()
+          : label.trim();
+        if (rowLookup.has(matchKey)) matched++;
+      }
+      return matched;
+    }
+
+    // ── Auto-guess optimal match settings ──────────────────────────────────
+    // Try each column in "full" mode, then each column × each pipe field.
+    let bestCol = 0, bestMode = 'full', bestField = 0, bestCount = 0;
+
+    // Detect max number of pipe fields in tip labels
+    let maxFields = 1;
+    for (const node of tips) {
+      const n = (node.name ?? '').split('|').length;
+      if (n > maxFields) maxFields = n;
+    }
+
+    for (let ci = 0; ci < headers.length; ci++) {
+      // Try full mode
+      const fullCount = _countMatches(ci, 'full', 0);
+      if (fullCount > bestCount) {
+        bestCount = fullCount; bestCol = ci; bestMode = 'full'; bestField = 0;
+      }
+      // Try each pipe-delimited field
+      if (maxFields > 1) {
+        for (let fi = 0; fi < maxFields; fi++) {
+          const fCount = _countMatches(ci, 'field', fi);
+          if (fCount > bestCount) {
+            bestCount = fCount; bestCol = ci; bestMode = 'field'; bestField = fi;
+          }
+        }
+      }
+    }
+
+    // Apply best guess to the UI
+    document.getElementById('imp-match-col').value = String(bestCol);
+    if (bestMode === 'field') {
+      document.getElementById('imp-mode-field').checked = true;
+      document.getElementById('imp-field-num').value = String(bestField + 1);
+    } else {
+      document.getElementById('imp-mode-full').checked = true;
+    }
+
+    // ── Update match count display ─────────────────────────────────────────
+    function _syncMatchCount() {
+      const el = document.getElementById('imp-match-count');
+      if (!el) return;
+      const colIdx   = parseInt(document.getElementById('imp-match-col').value, 10);
+      const isField  = document.getElementById('imp-mode-field').checked;
+      const fieldIdx = Math.max(1, parseInt(document.getElementById('imp-field-num').value, 10) || 1) - 1;
+      const count    = _countMatches(colIdx, isField ? 'field' : 'full', fieldIdx);
+      const total    = tips.length;
+      const pct      = total > 0 ? Math.round(100 * count / total) : 0;
+      const cls      = count === total ? 'imp-ok' : count > 0 ? 'imp-warn' : 'imp-err';
+      el.className   = cls;
+      el.innerHTML   = `<strong>${count}</strong> of ${total} tips matched (${pct}%)`;
+    }
+
     // When match column changes, disable that column in the import grid.
     function _syncMatchColDisabled() {
       const matchIdx = document.getElementById('imp-match-col').value;
@@ -247,6 +322,7 @@ export function createAnnotImporter({ getGraph, onApply, isTip }) {
         el.closest('label').style.opacity = isMatch ? '0.4' : '';
       });
       _syncCsvExamples();
+      _syncMatchCount();
     }
     document.getElementById('imp-match-col').addEventListener('change', _syncMatchColDisabled);
     _syncMatchColDisabled(); // init
@@ -299,10 +375,20 @@ export function createAnnotImporter({ getGraph, onApply, isTip }) {
     document.getElementById('imp-field-num').addEventListener('focus', () => {
       document.getElementById('imp-mode-field').checked = true;
       _syncExamples();
+      _syncMatchCount();
     });
-    document.getElementById('imp-field-num').addEventListener('input', _syncExamples);
-    document.getElementById('imp-mode-full') .addEventListener('change', _syncExamples);
-    document.getElementById('imp-mode-field').addEventListener('change', _syncExamples);
+    document.getElementById('imp-field-num').addEventListener('input', () => {
+      _syncExamples();
+      _syncMatchCount();
+    });
+    document.getElementById('imp-mode-full').addEventListener('change', () => {
+      _syncExamples();
+      _syncMatchCount();
+    });
+    document.getElementById('imp-mode-field').addEventListener('change', () => {
+      _syncExamples();
+      _syncMatchCount();
+    });
     _syncExamples(); // init
 
     // Toggle-all button.
