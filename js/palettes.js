@@ -214,7 +214,7 @@ export const DEFAULT_SEQUENTIAL_PALETTE = 'Teal-Red';
  * @returns {string[]}
  */
 export function getCategoricalPalette(name) {
-  return CATEGORICAL_PALETTES[name] ?? CATEGORICAL_PALETTES[DEFAULT_CATEGORICAL_PALETTE];
+  return _userCategorical[name] ?? CATEGORICAL_PALETTES[name] ?? CATEGORICAL_PALETTES[DEFAULT_CATEGORICAL_PALETTE];
 }
 
 /**
@@ -250,7 +250,7 @@ export function buildCategoricalColourMap(values, paletteName) {
  * @returns {string[]}  Array of 2 or more hex colour strings, min → max.
  */
 export function getSequentialPalette(name) {
-  return SEQUENTIAL_PALETTES[name] ?? SEQUENTIAL_PALETTES[DEFAULT_SEQUENTIAL_PALETTE];
+  return _userSequential[name] ?? SEQUENTIAL_PALETTES[name] ?? SEQUENTIAL_PALETTES[DEFAULT_SEQUENTIAL_PALETTE];
 }
 
 /**
@@ -271,6 +271,38 @@ export function hexToRgb(hex) {
  * @param {string[]} stops  Two or more hex colour strings from getSequentialPalette()
  * @returns {string}  CSS colour string
  */
+// ─── User-palette registry ───────────────────────────────────────────────────
+// Lets the palette-manager (or any host) register user-created palettes so
+// getCategoricalPalette / getSequentialPalette / buildCategoricalColourMap and
+// the renderer all resolve them without extra wiring.
+
+let _userCategorical = {};
+let _userSequential  = {};
+
+/**
+ * Replace the set of registered user categorical palettes.
+ * @param {Object<string, string[]>} palettes  name → colour array
+ */
+export function setUserCategoricalPalettes(palettes) { _userCategorical = palettes ?? {}; }
+
+/**
+ * Replace the set of registered user sequential palettes.
+ * @param {Object<string, string[]>} palettes  name → colour-stop array
+ */
+export function setUserSequentialPalettes(palettes) { _userSequential = palettes ?? {}; }
+
+/**
+ * Return a merged object of builtin + user categorical palettes.
+ * @returns {Object<string, string[]>}
+ */
+export function allCategoricalPalettes() { return { ...CATEGORICAL_PALETTES, ..._userCategorical }; }
+
+/**
+ * Return a merged object of builtin + user sequential palettes.
+ * @returns {Object<string, string[]>}
+ */
+export function allSequentialPalettes() { return { ...SEQUENTIAL_PALETTES, ..._userSequential }; }
+
 export function lerpSequential(t, stops) {
   const tc = Math.max(0, Math.min(1, t));
   const n  = stops.length;
