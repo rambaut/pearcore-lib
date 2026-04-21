@@ -372,7 +372,25 @@ export function createPaletteColourPicker(inputEl, { palettes }) {
       popup.style.top    = (rect.bottom + 4) + 'px';
       popup.style.bottom = 'auto';
     }
-    popup.style.left = rect.left + 'px';
+
+    // Horizontal placement:
+    // - Right-side tool panels should open pickers to their left.
+    // - Otherwise use default left alignment, while keeping within viewport.
+    const pad = 8;
+    const gap = 6;
+    const popupW = popup.offsetWidth || 220;
+    let left = rect.left;
+
+    if (rect.left > (window.innerWidth * 0.5)) {
+      left = rect.left - popupW - gap;
+    }
+
+    if (left < pad) left = pad;
+    if (left + popupW > window.innerWidth - pad) {
+      left = Math.max(pad, window.innerWidth - popupW - pad);
+    }
+
+    popup.style.left = left + 'px';
     popup.classList.add('open');
     _openPopups.add(entry);
   }
