@@ -6,7 +6,8 @@
 
 import { makeAnnotationFormatter, buildAnnotationSchema, isNumericType } from './annotation-utils.js';
 import { CATEGORICAL_PALETTES, SEQUENTIAL_PALETTES,
-         DEFAULT_CATEGORICAL_PALETTE, DEFAULT_SEQUENTIAL_PALETTE } from './palettes.js';
+         DEFAULT_CATEGORICAL_PALETTE, DEFAULT_SEQUENTIAL_PALETTE,
+         allCategoricalPalettes, allSequentialPalettes } from './palettes.js';
 import { htmlEsc as esc } from './utils.js';
 
 /** @private Format a number compactly for display in table cells. */
@@ -328,7 +329,7 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
     if (def.builtin) {
       const displayName = esc(def.label ?? name);
       const isCat    = def.dataType === 'categorical' || def.dataType === 'ordinal';
-      const palettes = isCat ? CATEGORICAL_PALETTES : SEQUENTIAL_PALETTES;
+      const palettes = isCat ? allCategoricalPalettes() : allSequentialPalettes();
       const defPal   = isCat ? DEFAULT_CATEGORICAL_PALETTE : DEFAULT_SEQUENTIAL_PALETTE;
       const stored   = _pendingPalettes.get(name) ?? (getAnnotationPalette ? getAnnotationPalette(name) : null) ?? defPal;
       const opts = Object.keys(palettes)
