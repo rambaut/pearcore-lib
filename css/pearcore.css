@@ -1005,6 +1005,18 @@
 }
 .pt-palette-subhead:first-child { margin-top: 0; }
 
+/* Shared 3-column palette grid for nested control containers. */
+.pt-palette-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr auto;
+  column-gap: 8px;
+  row-gap: 6px;
+  align-items: center;
+}
+.pt-palette-grid > :not(.pt-palette-row):not(.pt-palette-row--span) {
+  grid-column: 1 / -1;
+}
+
 /* ── Palette row grid ── */
 /* Each row spans its parent grid and inherits column tracks via subgrid.
    This keeps labels in col 1, controls in col 2, values in col 3,
