@@ -145,28 +145,93 @@ export function parseNewick(newickString, tipNameMap = null) {
 }
 
 /**
+ * Parse a NEXUS taxon label that may carry a [&key=value,...] annotation block.
+ * Returns { name, annotations }.
+ * Input examples:
+ *   'KX228391|homo_sapiens|brazil|2016-03-03'[&lineage="D",clade="II-ECSA"]
+ *   Taxon_A
+ */
+function _parseTaxonLabel(raw) {
+  const annotStart = raw.indexOf('[&');
+  let name = annotStart === -1 ? raw : raw.slice(0, annotStart);
+  // Strip surrounding quotes from tip name.
+  name = name.trim().replace(/^['"]|['"]$/g, '');
+
+  const annotations = {};
+  if (annotStart !== -1) {
+    const annotEnd = raw.indexOf(']', annotStart);
+    const inner = annotEnd === -1 ? raw.slice(annotStart + 2) : raw.slice(annotStart + 2, annotEnd);
+    // Reuse the same token-split approach as parseNewick for consistency.
+    const tokens = inner.split(/\s*(',?"[^"]*"|'[^']*'|[=,{}])\s*/);
+    let keyNext = true;
+    let key = null;
+    let inRange = false;
+    for (const tok of tokens) {
+      const t = tok.trim();
+      if (!t) continue;
+      if (t === '=')  { keyNext = false; continue; }
+      if (t === ',')  { if (!inRange) keyNext = true; continue; }
+      if (t === '{')  { inRange = true; annotations[key] = []; continue; }
+      if (t === '}')  { inRange = false; continue; }
+      let val = t.replace(/^['"]|['"]$/g, '');
+      if (keyNext) {
+        key = val.replace('.', '_');
+      } else {
+        const num = Number(val);
+        const parsed = (val === '?' || val === '') ? null : (!isNaN(num) ? num : val);
+        if (inRange) { annotations[key].push(parsed); }
+        else         { annotations[key] = parsed; }
+      }
+    }
+  }
+  return { name, annotations };
+}
+
+/**
  * Parse a NEXUS string, return array of root-node objects.
  */
 export function parseNexus(nexus) {
   const trees = [];
-  // split on block delimiters
-  nexus.split(
-    /\s*(?:^|(?<=\s))begin(?=\s)|(?<=\s)end(?=\s*;)\s*;/gi
-  );
-  // Fallback simpler split for environments where lookbehind isn't supported:
   const rawText = nexus;
 
   // Robust block extraction using a simple state machine
   const lines = rawText.split('\n');
   let inTreesBlock = false;
-  const tipNameMap = new Map();
+  let inTaxaBlock  = false;
+  let inTaxLabels  = false;
+  const tipNameMap  = new Map();
+  // Map from (unquoted) taxon name → annotation object collected from taxa block
+  const taxonAnnotMap = new Map();
   let inTranslate = false;
   let peartreeSettings = null;
 
   for (const rawLine of lines) {
-    const line = rawLine.trim();
+    const line  = rawLine.trim();
     const lower = line.toLowerCase();
 
+    // ── Taxa block ────────────────────────────────────────────────────────
+    if (!inTreesBlock && (lower === 'begin taxa;' || lower.startsWith('begin taxa;'))) {
+      inTaxaBlock = true; continue;
+    }
+    if (inTaxaBlock) {
+      if (lower === 'end;' || lower === 'end') { inTaxaBlock = false; inTaxLabels = false; continue; }
+      if (lower === 'taxlabels' || lower === 'taxlabels;') { inTaxLabels = true; continue; }
+      if (lower.startsWith('dimensions')) continue; // ntax= line — skip
+      if (inTaxLabels) {
+        if (line === ';') { inTaxLabels = false; continue; }
+        // A taxlabels line may end with ; (last entry) — strip it.
+        const entry = line.replace(/;$/, '').trim();
+        if (entry) {
+          const { name, annotations } = _parseTaxonLabel(entry);
+          if (name && Object.keys(annotations).length > 0) {
+            taxonAnnotMap.set(name, annotations);
+          }
+        }
+      }
+      continue;
+    }
+
+    // ── Trees block ───────────────────────────────────────────────────────
     if (lower === 'begin trees;' || lower.startsWith('begin trees;')) {
       inTreesBlock = true; inTranslate = false; continue;
     }
@@ -208,6 +273,39 @@ export function parseNexus(nexus) {
   if (peartreeSettings) {
     for (const t of trees) {
       if (!t.peartreeSettings) t.peartreeSettings = peartreeSettings;
+    }
+  }
+
+  // ── Apply taxa-block annotations to tips ─────────────────────────────────
+  if (taxonAnnotMap.size > 0) {
+    for (const treeEntry of trees) {
+      const mismatched = [];
+      const stack = [treeEntry.root];
+      while (stack.length) {
+        const node = stack.pop();
+        const isTip = !node.children || node.children.length === 0;
+        if (isTip && node.name) {
+          const annots = taxonAnnotMap.get(node.name);
+          if (annots) {
+            // Merge: taxa-block annotations do NOT overwrite existing in-tree annotations.
+            for (const [k, v] of Object.entries(annots)) {
+              if (!(k in node.annotations)) node.annotations[k] = v;
+            }
+          } else {
+            mismatched.push(node.name);
+          }
+        }
+        if (node.children) for (const c of node.children) stack.push(c);
+      }
+      if (mismatched.length > 0) {
+        const MAX = 5;
+        const sample = mismatched.slice(0, MAX).map(n => `"${n}"`).join(', ');
+        const more   = mismatched.length > MAX ? ` … and ${mismatched.length - MAX} more` : '';
+        console.warn(
+          `[PearTree] ${mismatched.length} tip(s) in the tree have no matching entry in the taxa block: ${sample}${more}`
+        );
+        treeEntry.taxonAnnotWarnings = mismatched;
+      }
     }
   }
 
