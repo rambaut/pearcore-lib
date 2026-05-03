@@ -214,7 +214,7 @@ export function createAnnotImporter({ getGraph, onApply, isTip }) {
       </div>
 
       <div class="imp-section" id="imp-match-count-section">
-        <div id="imp-match-count" style="font-size:0.82rem;padding:0.4rem 0.6rem;border-radius:4px;background:var(--pt-bg-secondary, #f0f0f0);color:var(--pt-text-bright)"></div>
+        <div id="imp-match-count" style="font-size:0.82rem;padding:0.4rem 0.6rem;border-radius:4px;background:var(--pt-surface);color:var(--pt-text-bright)"></div>
       </div>
 
       ${exHtml}
