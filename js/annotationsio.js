@@ -160,7 +160,7 @@ export function createAnnotImporter({ getGraph, onApply, isTip }) {
     const exHtml = tips.length > 0
       ? `<div class="imp-section" id="imp-examples-section">
           <label class="imp-section-label">Examples</label>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;align-items:start">
+          <div style="display:grid;grid-template-columns:auto auto;gap:0.75rem;align-items:start">
             <div>
               <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--pt-text-muted);margin-bottom:4px">CSV: <span id="imp-csv-col-name"></span></div>
               <div id="imp-csv-examples" style="font-family:monospace;font-size:0.78rem;color:var(--pt-text-bright);line-height:1.7"></div>
