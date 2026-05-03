@@ -58,6 +58,8 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
   document.getElementById('parse-tips-close') .addEventListener('click', _closeParseTips);
   document.getElementById('parse-tips-cancel').addEventListener('click', _closeParseTips);
   document.getElementById('parse-tips-ok')    .addEventListener('click', _runParseTips);
+  document.getElementById('parse-tips-delim') .addEventListener('input', _updateParseTipsPreview);
+  document.getElementById('parse-tips-field') .addEventListener('input', _updateParseTipsPreview);
   parseTipsOverlay.addEventListener('click', e => { if (e.target === parseTipsOverlay) _closeParseTips(); });
   // Allow Enter key to submit and Escape to cancel the sub-dialog; use capture to
   // intercept before the parent overlay's key handlers see the event.
@@ -557,6 +559,40 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
 
   // ── Parse Tips ────────────────────────────────────────────────────────────
 
+  let _parseTipSamples  = [];
+  let _parseTipOverflow = 0;
+
+  function _updateParseTipsPreview() {
+    const examplesList = document.getElementById('parse-tips-examples-list');
+    if (!examplesList || _parseTipSamples.length === 0) return;
+    const delim    = document.getElementById('parse-tips-delim').value;
+    const fieldNum = parseInt(document.getElementById('parse-tips-field').value, 10);
+    let html = _parseTipSamples.map(label => {
+      if (!delim || isNaN(fieldNum) || fieldNum === 0) {
+        return `<div>${esc(label)}</div>`;
+      }
+      const parts = label.split(delim);
+      const idx   = fieldNum > 0 ? fieldNum - 1 : parts.length + fieldNum;
+      if (idx < 0 || idx >= parts.length) {
+        return `<div>${esc(label)}</div>`;
+      }
+      const before   = parts.slice(0, idx).map(esc).join(esc(delim));
+      const matchVal = parts[idx];
+      const after    = parts.slice(idx + 1).map(esc).join(esc(delim));
+      const delimEsc = esc(delim);
+      let row = '';
+      if (before) row += before + delimEsc;
+      row += `<strong style="color:var(--pt-gold)">${esc(matchVal)}</strong>`;
+      if (after) row += delimEsc + after;
+      row += ` <span style="color:var(--pt-text-muted)">→ ${esc(matchVal.trim())}</span>`;
+      return `<div>${row}</div>`;
+    }).join('');
+    if (_parseTipOverflow > 0) {
+      html += `<div style="color:var(--pt-text-muted)">… ${_parseTipOverflow} more</div>`;
+    }
+    examplesList.innerHTML = html;
+  }
+
   function _openParseTips() {
     document.getElementById('parse-tips-name').value    = '';
     document.getElementById('parse-tips-delim').value   = '|';
@@ -568,21 +604,19 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
     // Populate example tip labels
     const graph = getGraph();
     const examplesWrap = document.getElementById('parse-tips-examples');
-    const examplesList = document.getElementById('parse-tips-examples-list');
     const tips = graph
       ? graph.nodes.filter(n => isTip(n) && n.name != null)
       : [];
     if (tips.length > 0) {
       const MAX = 5;
       const sample = tips.slice(0, MAX);
-      examplesList.innerHTML = sample.map(n => {
-        const label = n.name.length > 60 ? n.name.slice(0, 57) + '\u2026' : n.name;
-        return `<div>${esc(label)}</div>`;
-      }).join('') + (tips.length > MAX
-        ? `<div style="color:var(--pt-text-muted)">… ${tips.length - MAX} more</div>`
-        : '');
+      _parseTipSamples  = sample.map(n => n.name.length > 60 ? n.name.slice(0, 57) + '\u2026' : n.name);
+      _parseTipOverflow = tips.length > MAX ? tips.length - MAX : 0;
       examplesWrap.style.display = '';
+      _updateParseTipsPreview();
     } else {
+      _parseTipSamples  = [];
+      _parseTipOverflow = 0;
       examplesWrap.style.display = 'none';
     }
 
@@ -592,6 +626,8 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
 
   function _closeParseTips() {
     parseTipsOverlay.classList.remove('open');
+    _parseTipSamples  = [];
+    _parseTipOverflow = 0;
   }
 
   function _showParseError(msg) {
