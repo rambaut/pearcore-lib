@@ -94,9 +94,9 @@ export function createThemeManager({
     const isCustom  = sel === 'custom';
     const isBuiltIn = !!builtInThemes[sel];
     const isDefault = sel === _defaultTheme;
-    if (buttons.store)   buttons.store.disabled   = !isCustom;
-    if (buttons.default) buttons.default.disabled = isCustom || isDefault;
-    if (buttons.remove)  buttons.remove.disabled  = isCustom || isBuiltIn;
+    if (buttons.store)      buttons.store.disabled      = !isCustom;
+    if (buttons.setDefault) buttons.setDefault.disabled = isCustom || isDefault;
+    if (buttons.remove)     buttons.remove.disabled     = isCustom || isBuiltIn;
     if (buttons.export)  buttons.export.disabled  = false;
     if (buttons.import)  buttons.import.disabled  = false;
   }

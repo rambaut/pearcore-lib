@@ -69,44 +69,51 @@ export const CATEGORICAL_PALETTES = {
 
   /** ARTIC — colours sampled from the ARTIC network / PearTree Artic theme. */
   'ARTIC': [
-    '#19A699', // teal
-    '#B58901', // gold
-    '#E06961', // coral red
-    '#f7eeca', // cream
-    '#3b9ddd', // sky blue
-    '#8eb35a', // olive green
-    '#c97fb5', // mauve
-    '#6bcac0', // mint
+    '#02292E', // teal
+    '#015C68', // gold
+    '#017280', // coral red
+    '#21968B', // cream
+    '#F7EECA', // sky blue
+    '#E06961', // olive green
   ],
 
-  /**
-   * Wes — a curated palette inspired by the muted, idiosyncratic
-   * colour worlds of his films.  Hues are spread across the full wheel at
-   * varied saturation and brightness so all 16 values remain legible and
-   * clearly distinct from one another (and from the neutral missing-data grey).
-   *
-   * Film references (approximate):
-   *   The Royal Tenenbaums · Moonrise Kingdom · The Life Aquatic
-   *   Fantastic Mr. Fox · The Grand Budapest Hotel · The Darjeeling Limited
-   *   Rushmore · Isle of Dogs
-   */
+  'BEAST': [
+    '#CBB944',
+    '#5A5F62',
+    '#3B6F84',
+    '#68A3BB',
+    '#B1CBB8',
+  ],
+  'MCM': [
+    '#D95A47',
+    '#E97A57',
+    '#F6A14C',
+    '#EBB642',
+    '#F5D1B2',
+    '#D9D3CA',
+    '#92B5A7',
+    '#40847D',
+    '#3B4D5E',
+    '#5A5F62',
+  ],
+
   'Wes': [
-    '#C1615A', // dusty red        — Tenenbaums burgundy warmth
-    '#E07B39', // burnt orange      — Fantastic Mr. Fox
-    '#C9A84C', // saffron gold      — Darjeeling Limited
-    '#8D9040', // olive             — Moonrise Kingdom scouts
-    '#4A7C3F', // forest green      — Tenenbaums tennis court
-    '#2A6B5A', // deep teal-green   — Life Aquatic diving suit
-    '#3D8C8C', // teal              — Life Aquatic vessel
-    '#3D5A80', // muted navy        — Life Aquatic ocean
-    '#5C4E8A', // dusty violet      — Budapest lobby carpet
-    '#9B72AA', // soft lavender     — Budapest tower facade
-    '#C06B82', // rose              — Budapest hotel uniform
-    '#7D2E46', // deep burgundy     — Rushmore chapel
-    '#6B4226', // rich brown        — Fox fur
-    '#B8956A', // warm caramel      — Moonrise Kingdom canvas
-    '#E8D0A3', // pale sand         — Isle of Dogs ash plain
-    '#7A8594', // slate blue-grey   — Isle of Dogs industrial haze
+    '#C1615A', // dusty red        
+    '#E07B39', // burnt orange     
+    '#C9A84C', // saffron gold     
+    '#8D9040', // olive            
+    '#4A7C3F', // forest green     
+    '#2A6B5A', // deep teal-green  
+    '#3D8C8C', // teal             
+    '#3D5A80', // muted navy       
+    '#5C4E8A', // dusty violet     
+    '#9B72AA', // soft lavender    
+    '#C06B82', // rose             
+    '#7D2E46', // deep burgundy    
+    '#6B4226', // rich brown       
+    '#B8956A', // warm caramel     
+    '#E8D0A3', // pale sand        
+    '#7A8594', // slate blue-grey  
   ],
 
 };
@@ -147,33 +154,35 @@ export const SEQUENTIAL_PALETTES = {
   // The midpoint black creates a dramatic separation between the two extremes.
 
   /** Blue → Black → Red */
-  'Blue-Black-Red':     ['#1e70b5', '#111111', '#c82424'],
+  'Blue-Black-Red': ['#1e70b5', '#111111', '#c82424'],
 
   /** Teal → Black → Orange */
-  'Teal-Black-Orange':  ['#2aa198', '#111111', '#e07b39'],
+  'Teal-Black-Orange': ['#2aa198', '#111111', '#e07b39'],
 
   /** Purple → Black → Gold */
-  'Purple-Black-Gold':  ['#6a2080', '#111111', '#d49800'],
+  'Purple-Black-Gold': ['#6a2080', '#111111', '#d49800'],
 
   /** Cyan → Black → Magenta */
   'Cyan-Black-Magenta': ['#009bb5', '#111111', '#b52880'],
 
+  'ARTIC': [
+    '#21968B', // cream
+    '#F7EECA', // sky blue
+    '#E06961', // olive green
+  ],
   // ── Spectrum palettes (multi-stop) ──────────────────────────────────────
-  // Each sweeps a broad arc of the colour wheel with varied saturation and
-  // brightness so every stop is clearly distinct.
 
-  /** ARTIC — colours sampled from the ARTIC network / PearTree Artic theme. */
-    'ARTIC': [
-    '#7D2E46', // deep burgundy     — Rushmore chapel
-    '#C1615A', // dusty red        — Tenenbaums burgundy warmth
-    '#E07B39', // burnt orange      — Fantastic Mr. Fox
-    '#C9A84C', // saffron gold      — Darjeeling Limited
-    '#8D9040', // olive             — Moonrise Kingdom scouts
-    '#4A7C3F', // forest green      — Tenenbaums tennis court
-    '#2A6B5A', // deep teal-green   — Life Aquatic diving suit
-    '#3D5A80', // muted navy        — Life Aquatic ocean
-    '#5C4E8A', // dusty violet      — Budapest lobby carpet
-      ],
+  'Desaturated': [
+    '#7D2E46',
+    '#C1615A',
+    '#E07B39',
+    '#C9A84C',
+    '#8D9040',
+    '#4A7C3F',
+    '#2A6B5A',
+    '#3D5A80',
+    '#5C4E8A',
+  ],
 
   /**
    * Rainbow — a full hue sweep: red → orange → yellow → green → blue → violet.
@@ -277,7 +286,7 @@ export function hexToRgb(hex) {
 // the renderer all resolve them without extra wiring.
 
 let _userCategorical = {};
-let _userSequential  = {};
+let _userSequential = {};
 
 /**
  * Replace the set of registered user categorical palettes.
@@ -305,17 +314,17 @@ export function allSequentialPalettes() { return { ...SEQUENTIAL_PALETTES, ..._u
 
 export function lerpSequential(t, stops) {
   const tc = Math.max(0, Math.min(1, t));
-  const n  = stops.length;
+  const n = stops.length;
   if (n === 0) return 'rgb(0,0,0)';
   if (n === 1) return stops[0];
   // Map t into segment index; clamp so t=1 selects the last segment exactly.
   const scaled = tc * (n - 1);
-  const lo  = Math.min(Math.floor(scaled), n - 2);
-  const lt  = scaled - lo;
+  const lo = Math.min(Math.floor(scaled), n - 2);
+  const lt = scaled - lo;
   const loC = hexToRgb(stops[lo]);
   const hiC = hexToRgb(stops[lo + 1]);
-  const r   = Math.round(loC.r + lt * (hiC.r - loC.r));
-  const g   = Math.round(loC.g + lt * (hiC.g - loC.g));
-  const b   = Math.round(loC.b + lt * (hiC.b - loC.b));
+  const r = Math.round(loC.r + lt * (hiC.r - loC.r));
+  const g = Math.round(loC.g + lt * (hiC.g - loC.g));
+  const b = Math.round(loC.b + lt * (hiC.b - loC.b));
   return `rgb(${r},${g},${b})`;
 }
