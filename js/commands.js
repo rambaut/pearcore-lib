@@ -114,5 +114,9 @@ export function matchesShortcut(e, shortcut) {
   if (needsShift   !== e.shiftKey)               return false;
   if (needsAlt     !== e.altKey)                 return false;
 
-  return e.key === rawKey || e.key.toLowerCase() === rawKey.toLowerCase();
+  if (e.key === rawKey || e.key.toLowerCase() === rawKey.toLowerCase()) return true;
+  // For digit keys (0–9), also match by physical key code so Shift+Digit
+  // shortcuts fire correctly regardless of the shifted character (e.g. Shift+1 → '!').
+  if (/^[0-9]$/.test(rawKey) && e.code === 'Digit' + rawKey) return true;
+  return false;
 }
