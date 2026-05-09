@@ -474,6 +474,7 @@ function buildStatusBarHTML(opts = {}) {
   <span id="status-stats"></span>
   <span id="status-select"></span>
   <span id="status-message"></span>
+  <button id="btn-share-url" title="Copy sharable link to clipboard" class="d-none"><i class="bi bi-link-45deg"></i></button>
   ${showTheme ? '<button id="btn-theme" title="Toggle light/dark mode"><i class="bi bi-sun"></i></button>' : ''}
   ${showAbout ? '<button id="btn-about" title="About"><i class="bi bi-info-circle"></i></button>' : ''}
   ${showHelp  ? '<button id="btn-help" title="Help"><i class="bi bi-question-circle"></i></button>' : ''}

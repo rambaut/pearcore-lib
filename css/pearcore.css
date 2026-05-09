@@ -455,7 +455,7 @@
 }
 #status-select {
   position: absolute;
-  right: 92px;
+  right: 118px;
   top: 0;
   bottom: 0;
   display: flex;
@@ -668,6 +668,23 @@
 }
 #btn-about:hover  { color: var(--pt-gold); }
 #btn-about.active { color: var(--pt-gold); }
+/* Share-URL button in status bar */
+#btn-share-url {
+  position: absolute;
+  right: 86px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 0.85rem;
+  color: var(--pt-text-status-icon);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+#btn-share-url:hover { color: var(--pt-gold); }
 /* Theme toggle in status bar */
 #btn-theme {
   position: absolute;
