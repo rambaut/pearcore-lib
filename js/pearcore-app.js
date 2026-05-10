@@ -325,11 +325,34 @@ export function resolveEmbedConfig({ configKey, settingsKeyDefault, flagDefs, ex
   const _wc = window[configKey] || {};
   const _ui = _wc.ui || {};
 
-  const _flag = (uiVal, param) => uiVal !== undefined ? Boolean(uiVal) : _p.get(param) !== '0';
-  const _flagEx = (uiVal, param) => {
-    if (uiVal === 'fixed') return 'fixed';
-    if (uiVal !== undefined) return Boolean(uiVal);
-    return _p.get(param) !== '0';
+  const _coerceUiFlag = (val, extended = false) => {
+    if (val === undefined) return undefined;
+    if (extended && val === 'fixed') return 'fixed';
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'number') return val !== 0;
+    if (typeof val === 'string') {
+      const s = val.trim().toLowerCase();
+      if (extended && s === 'fixed') return 'fixed';
+      if (s === '0' || s === 'false') return false;
+      if (s === '1' || s === 'true') return true;
+    }
+    return Boolean(val);
+  };
+
+  const _resolveUiValue = (def) => {
+    if (Array.isArray(def.uiKeys) && def.uiKeys.length) {
+      for (const key of def.uiKeys) {
+        if (_ui[key] !== undefined) return _ui[key];
+      }
+      return undefined;
+    }
+    return _ui[def.uiKey];
+  };
+
+  const _resolveFromParam = (param, extended = false) => {
+    const raw = _p.get(param);
+    if (extended && raw === 'fixed') return 'fixed';
+    return raw !== '0';
   };
 
   const _sk = _wc.storageKey !== undefined
@@ -345,8 +368,11 @@ export function resolveEmbedConfig({ configKey, settingsKeyDefault, flagDefs, ex
   };
 
   for (const def of flagDefs) {
-    const resolver = def.extended ? _flagEx : _flag;
-    cfg[def.name] = resolver(_ui[def.uiKey], def.param);
+    const uiVal = _resolveUiValue(def);
+    const coerced = _coerceUiFlag(uiVal, !!def.extended);
+    cfg[def.name] = (coerced !== undefined)
+      ? coerced
+      : _resolveFromParam(def.param, !!def.extended);
   }
 
   if (extras) Object.assign(cfg, extras(_wc, _p));
