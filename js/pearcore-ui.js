@@ -791,9 +791,13 @@ function initDarkModeToggle(root, opts = {}) {
     }
   }
 
-  const urlMode = new URLSearchParams(window.location.search).get('mode');
-  const saved = (urlMode === 'dark' || urlMode === 'light') ? urlMode
-              : opts.theme ?? (!noStorage ? localStorage.getItem(STORAGE_KEY) : null);
+  const _params = new URLSearchParams(window.location.search);
+  // Prefer explicit theme=light|dark, but keep mode=light|dark for backwards compatibility.
+  const urlTheme = _params.get('theme');
+  const urlMode = _params.get('mode');
+  const urlThemeMode = (urlTheme === 'dark' || urlTheme === 'light') ? urlTheme
+                     : ((urlMode === 'dark' || urlMode === 'light') ? urlMode : null);
+  const saved = urlThemeMode ?? opts.theme ?? (!noStorage ? localStorage.getItem(STORAGE_KEY) : null);
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   applyTheme(saved ?? (prefersDark ? 'dark' : 'light'));
 
