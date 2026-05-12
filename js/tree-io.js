@@ -363,16 +363,16 @@ function branchLen(ci, pi, g) {
  * Recursively serialize the subtree rooted at `nodeIdx` (coming from direction
  * `parentIdx`, which is excluded from children) into a Newick string fragment.
  */
-function newickNode(nodeIdx, parentIdx, g, annotKeys, nodeLabelKey) {
+function newickNode(nodeIdx, parentIdx, g, annotKeys, nodeLabelKey, tipNameFn = null) {
   const node      = g.nodes[nodeIdx];
   const annotStr  = fmtAnnot(node.annotations, annotKeys);
-  const safeName  = newickEsc(node.name || node.label || '');
   const childIdxs = node.adjacents.filter(i => i !== parentIdx);
   if (childIdxs.length === 0) {
+    const safeName = newickEsc((tipNameFn ? tipNameFn(node) : (node.name || node.label || '')) || '');
     return `${safeName}${annotStr}`;
   }
   const parts = childIdxs.map(ci => {
-    const cStr   = newickNode(ci, nodeIdx, g, annotKeys, nodeLabelKey);
+    const cStr   = newickNode(ci, nodeIdx, g, annotKeys, nodeLabelKey, tipNameFn);
     const len    = branchLen(ci, nodeIdx, g);
     const lenStr = len != null ? `:${fmtLen(len)}` : '';
     return `${cStr}${lenStr}`;
@@ -389,7 +389,7 @@ function newickNode(nodeIdx, parentIdx, g, annotKeys, nodeLabelKey) {
  * Serialize the PhyloGraph `g` (or a subtree rooted at `subtreeRootId`) to
  * a Newick string ended with ';'.
  */
-export function graphToNewick(g, subtreeRootId, annotKeys, nodeLabelKey = null) {
+export function graphToNewick(g, subtreeRootId, annotKeys, nodeLabelKey = null, tipNameFn = null) {
   const { nodeA, nodeB, lenA } = g.root;
   let body;
   if (subtreeRootId) {
@@ -397,14 +397,14 @@ export function graphToNewick(g, subtreeRootId, annotKeys, nodeLabelKey = null) 
     if (idx === undefined) return null;
     const node = g.nodes[idx];
     const parentIdx = node.adjacents.length > 0 ? node.adjacents[0] : -1;
-    body = newickNode(idx, parentIdx, g, annotKeys, nodeLabelKey);
+    body = newickNode(idx, parentIdx, g, annotKeys, nodeLabelKey, tipNameFn);
   } else if (lenA === 0) {
     // nodeA is the actual root (trifurcating or annotated)
-    body = newickNode(nodeA, -1, g, annotKeys, nodeLabelKey);
+    body = newickNode(nodeA, -1, g, annotKeys, nodeLabelKey, tipNameFn);
   } else {
     // Virtual root between nodeA and nodeB
-    const aStr = newickNode(nodeA, nodeB, g, annotKeys, nodeLabelKey);
-    const bStr = newickNode(nodeB, nodeA, g, annotKeys, nodeLabelKey);
+    const aStr = newickNode(nodeA, nodeB, g, annotKeys, nodeLabelKey, tipNameFn);
+    const bStr = newickNode(nodeB, nodeA, g, annotKeys, nodeLabelKey, tipNameFn);
     const aLen = lenA != null        ? `:${fmtLen(lenA)}`        : '';
     const bLen = g.root.lenB != null ? `:${fmtLen(g.root.lenB)}` : '';
     body = `(${aStr}${aLen},${bStr}${bLen})`;
