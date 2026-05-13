@@ -440,6 +440,8 @@ export function initSectionAccordion(root, { storageKey, defaultSectionId = 'tre
     if (isPinned) {
       sec.classList.remove('pt-palette-section--pinned');
       if (pinIcon) pinIcon.className = 'bi bi-pin';
+      const pinBtn = sec.querySelector(':scope > h3 .pt-sec-pin');
+      if (pinBtn) pinBtn.title = 'Pin open';
       _allSec().forEach(s => {
         if (s !== sec && s.classList.contains('pt-palette-section--open') && !s.classList.contains('pt-palette-section--pinned'))
           _closeSec(s);
@@ -449,6 +451,8 @@ export function initSectionAccordion(root, { storageKey, defaultSectionId = 'tre
     } else {
       sec.classList.add('pt-palette-section--open', 'pt-palette-section--pinned');
       if (pinIcon) pinIcon.className = 'bi bi-pin-fill';
+      const pinBtn = sec.querySelector(':scope > h3 .pt-sec-pin');
+      if (pinBtn) pinBtn.title = 'Unpin';
       st[sec.dataset.secId] = { open: true, pinned: true };
     }
     _saveSt(st);
@@ -509,6 +513,8 @@ export function initSectionAccordion(root, { storageKey, defaultSectionId = 'tre
         sec.classList.add('pt-palette-section--open', 'pt-palette-section--pinned');
         const pi = sec.querySelector(':scope > h3 .pt-sec-pin i');
         if (pi) pi.className = 'bi bi-pin-fill';
+        const pb = sec.querySelector(':scope > h3 .pt-sec-pin');
+        if (pb) pb.title = 'Unpin';
       }
     });
 
