@@ -204,6 +204,8 @@ export function parseNexus(nexus) {
   const taxonAnnotMap = new Map();
   let inTranslate = false;
   let peartreeSettings = null;
+  let inPeartreeBlock = false;
+  let peartreeBuffer  = '';
 
   for (const rawLine of lines) {
     const line  = rawLine.trim();
@@ -238,10 +240,26 @@ export function parseNexus(nexus) {
     if (inTreesBlock) {
       if (lower === 'end;' || lower === 'end') { inTreesBlock = false; continue; }
 
-      // Detect embedded PearTree settings comment: [peartree={...}]
-      const ptMatch = line.match(/^\[peartree=(\{.*\})\]$/i);
-      if (ptMatch) {
-        try { peartreeSettings = JSON.parse(ptMatch[1]); } catch { /* ignore malformed */ }
+      // Detect embedded PearTree settings comment: [peartree={...}] (single or multi-line)
+      if (inPeartreeBlock) {
+        if (line.endsWith('}]')) {
+          peartreeBuffer += '\n' + line.slice(0, -1); // strip trailing ]
+          inPeartreeBlock = false;
+          try { peartreeSettings = JSON.parse(peartreeBuffer); } catch { /* ignore malformed */ }
+          peartreeBuffer = '';
+        } else {
+          peartreeBuffer += '\n' + line;
+        }
+        continue;
+      }
+      if (/^\[peartree=\{/i.test(line)) {
+        const singleLine = line.match(/^\[peartree=(\{.*\})\]$/i);
+        if (singleLine) {
+          try { peartreeSettings = JSON.parse(singleLine[1]); } catch { /* ignore malformed */ }
+        } else {
+          inPeartreeBlock = true;
+          peartreeBuffer  = line.replace(/^\[peartree=/i, ''); // keep the opening {
+        }
         continue;
       }
 
