@@ -28,7 +28,7 @@
  * @param {Function} opts.showConfirmDialog  - (title, msg, opts) → Promise<bool>
  * @param {Function} opts.showPromptDialog   - (title, msg, default) → Promise<string|null>
  * @param {Function} opts.downloadBlob       - (content, mime, filename) → void
- * @param {string}  [opts.appName]           - App name for export filenames (default 'peartree')
+ * @param {string}  [opts.appName]           - App name for export filenames (default 'app')
  * @returns {object} Theme manager API
  */
 export function createThemeManager({
@@ -45,7 +45,7 @@ export function createThemeManager({
   showConfirmDialog,
   showPromptDialog,
   downloadBlob,
-  appName = 'peartree',
+  appName = 'app',
 }) {
   const registry = new Map(Object.entries(builtInThemes));
   let _defaultTheme = Object.keys(builtInThemes)[0];

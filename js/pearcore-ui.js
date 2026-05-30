@@ -940,19 +940,23 @@ function initToolbarHeight(root) {
  * @param {boolean} [opts.noStorage]
  * @param {string}  [opts.themeStorageKey]
  *
+ * App identity:
+ * @param {string}  [opts.appName]           - used to namespace localStorage keys (default 'app')
+ *
  * Keyboard:
  * @param {boolean} [opts.keyboardEnabled]   - default true
  *
  * @returns {{ palette: SidePanelController, helpAbout: HelpAboutController }}
  */
 function initCoreUIBindings(root, opts = {}) {
+  const appName = opts.appName || 'app';
   // ── Side panel (palette) ───────────────────────────────────────────────
   const palette = initSidePanel(root, {
     panelId:       'palette-panel',
     toggleBtnId:   'btn-palette',
     closeBtnId:    'btn-palette-close',
     pinBtnId:      'btn-palette-pin',
-    storageKey:    'peartree-palette-pinned',
+    storageKey:    `${appName}-palette-pinned`,
     advancedToggle: true,
     initialPinned: opts.palettePinned,
     initialOpen:   opts.paletteOpen,

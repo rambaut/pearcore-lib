@@ -190,9 +190,11 @@ function _parseTaxonLabel(raw) {
 /**
  * Parse a NEXUS string, return array of root-node objects.
  */
-export function parseNexus(nexus) {
+export function parseNexus(nexus, { appName = 'settings' } = {}) {
   const trees = [];
   const rawText = nexus;
+  // Escape appName for use in a RegExp (handles hyphens, dots, etc.)
+  const _appNameRe = appName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   // Robust block extraction using a simple state machine
   const lines = rawText.split('\n');
@@ -203,9 +205,9 @@ export function parseNexus(nexus) {
   // Map from (unquoted) taxon name → annotation object collected from taxa block
   const taxonAnnotMap = new Map();
   let inTranslate = false;
-  let peartreeSettings = null;
-  let inPeartreeBlock = false;
-  let peartreeBuffer  = '';
+  let appSettings    = null;
+  let inAppBlock     = false;
+  let appBuffer      = '';
 
   for (const rawLine of lines) {
     const line  = rawLine.trim();
@@ -240,25 +242,25 @@ export function parseNexus(nexus) {
     if (inTreesBlock) {
       if (lower === 'end;' || lower === 'end') { inTreesBlock = false; continue; }
 
-      // Detect embedded PearTree settings comment: [peartree={...}] (single or multi-line)
-      if (inPeartreeBlock) {
+      // Detect embedded app settings comment: [appname={...}] (single or multi-line)
+      if (inAppBlock) {
         if (line.endsWith('}]')) {
-          peartreeBuffer += '\n' + line.slice(0, -1); // strip trailing ]
-          inPeartreeBlock = false;
-          try { peartreeSettings = JSON.parse(peartreeBuffer); } catch { /* ignore malformed */ }
-          peartreeBuffer = '';
+          appBuffer += '\n' + line.slice(0, -1); // strip trailing ]
+          inAppBlock = false;
+          try { appSettings = JSON.parse(appBuffer); } catch { /* ignore malformed */ }
+          appBuffer = '';
         } else {
-          peartreeBuffer += '\n' + line;
+          appBuffer += '\n' + line;
         }
         continue;
       }
-      if (/^\[peartree=\{/i.test(line)) {
-        const singleLine = line.match(/^\[peartree=(\{.*\})\]$/i);
+      if (new RegExp('^\\[' + _appNameRe + '=\\{', 'i').test(line)) {
+        const singleLine = line.match(new RegExp('^\\[' + _appNameRe + '=([\\s\\S]*?)\\]$', 'i'));
         if (singleLine) {
-          try { peartreeSettings = JSON.parse(singleLine[1]); } catch { /* ignore malformed */ }
+          try { appSettings = JSON.parse(singleLine[1]); } catch { /* ignore malformed */ }
         } else {
-          inPeartreeBlock = true;
-          peartreeBuffer  = line.replace(/^\[peartree=/i, ''); // keep the opening {
+          inAppBlock = true;
+          appBuffer  = line.replace(new RegExp('^\\[' + _appNameRe + '=', 'i'), ''); // keep the opening {
         }
         continue;
       }
@@ -280,17 +282,17 @@ export function parseNexus(nexus) {
             newickStr,
             tipNameMap.size > 0 ? tipNameMap : null
           );
-          trees.push({ root, tipNameMap, peartreeSettings });
+          trees.push({ root, tipNameMap, appSettings });
         }
       }
     }
   }
 
-  // If we found peartree settings but the tree line came before the comment,
+  // If we found app settings but the tree line came before the comment,
   // back-fill any entries that didn't yet have it.
-  if (peartreeSettings) {
+  if (appSettings) {
     for (const t of trees) {
-      if (!t.peartreeSettings) t.peartreeSettings = peartreeSettings;
+      if (!t.appSettings) t.appSettings = appSettings;
     }
   }
 
@@ -429,7 +431,23 @@ export function graphToNewick(g, subtreeRootId, annotKeys, nodeLabelKey = null, 
   }
   return body + ';';
 }
-
+/**
+ * Wrap a Newick string in a NEXUS envelope.
+ *
+ * @param {string}  newick          - Newick string (from graphToNewick)
+ * @param {object}  [opts]
+ * @param {boolean} [opts.rooted]   - Emit the [&R] rooted flag (default false)
+ * @param {string}  [opts.appName]  - Key for the embedded settings comment
+ * @param {object}  [opts.settings] - Settings object to embed; omitted if falsy or appName absent
+ * @returns {string} Complete NEXUS text
+ */
+export function buildNexus(newick, { rooted = false, appName = null, settings = null } = {}) {
+  const rootedTag    = rooted ? '[&R] ' : '';
+  const settingsLine = (appName && settings)
+    ? `\t[${appName}=${JSON.stringify(settings, null, 2)}]\n`
+    : '';
+  return `#NEXUS\nBEGIN TREES;\n\ttree TREE1 = ${rootedTag}${newick}\n${settingsLine}END;\n`;
+}
 // -----------------------------------------------------------------------------
 // Additional map-oriented analysis helpers retained from main branch
 // -----------------------------------------------------------------------------
