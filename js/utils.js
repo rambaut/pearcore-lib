@@ -59,6 +59,59 @@ export async function blobToBase64(blob) {
 }
 
 /**
+ * Format a numeric annotation value with either a fixed decimal setting
+ * or the annotation's auto formatter.
+ *
+ * @param {number} value
+ * @param {object|null} def
+ * @param {number|null} decimalPlaces
+ * @param {object} [opts]
+ * @param {'fmtValue'|'fmt'} [opts.autoFormatter='fmtValue']
+ * @param {'string'|'fixed'} [opts.fallback='string']
+ * @param {number} [opts.fallbackDp=6]
+ * @returns {string}
+ */
+export function formatNumericAnnotationValue(
+  value,
+  def,
+  decimalPlaces,
+  { autoFormatter = 'fmtValue', fallback = 'string', fallbackDp = 6 } = {},
+) {
+  if (decimalPlaces != null) {
+    const dp = Math.max(0, Math.min(10, Number(decimalPlaces)));
+    return Number(value).toFixed(dp);
+  }
+
+  const autoFn = autoFormatter === 'fmt' ? def?.fmt : def?.fmtValue;
+  if (typeof autoFn === 'function') return autoFn(value);
+
+  return fallback === 'fixed'
+    ? Number(value).toFixed(fallbackDp)
+    : String(value);
+}
+
+/**
+ * Normalize a date-like label to full YYYY-MM-DD form when possible.
+ *
+ * @param {any} value
+ * @returns {string}
+ */
+export function formatDateLabelISO(value) {
+  const s = String(value ?? '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}$/.test(s)) return `${s}-01`;
+  if (/^\d{4}$/.test(s)) return `${s}-01-01`;
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+  return s;
+}
+
+/**
  * Wire a drag-and-drop target so that dropping a file calls `onDrop(file)`.
  * Adds the `drag-over` CSS class while a file is being dragged over the element.
  *

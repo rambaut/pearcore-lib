@@ -1086,13 +1086,11 @@
   column-gap: 8px;
   row-gap: 6px;
   align-items: center;
-  pointer-events: none;
   transition: display 0.18s allow-discrete, opacity 0.18s ease;
 }
 .pt-detail.pt-detail-open {
   display: grid;
   opacity: 1;
-  pointer-events: auto;
 }
 @starting-style {
   .pt-detail.pt-detail-open {
@@ -1141,6 +1139,8 @@
   padding: 1px 8px;
   font-size: 0.75rem;
   line-height: 1.4;
+  justify-self: start;
+  width: fit-content;
 }
 .pt-palette-color {
   width: 36px;
