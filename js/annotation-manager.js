@@ -664,31 +664,22 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
 
     // Extract the requested field from each tip name
     const extracted = [];
-    const missing   = [];
     for (const node of tips) {
       const parts = (node.name ?? '').split(delimiter);
       const idx   = fieldNum > 0 ? fieldNum - 1 : parts.length + fieldNum;
       if (idx < 0 || idx >= parts.length) {
-        missing.push(node.name);
+        // Tip doesn't have enough fields — treat as missing rather than erroring
+        extracted.push({ node, raw: null });
       } else {
         extracted.push({ node, raw: parts[idx].trim() });
       }
     }
 
-    if (missing.length > 0) {
-      const sample = missing.slice(0, 3).map(n => `"${n}"`).join(', ');
-      _showParseError(
-        `${missing.length} tip${missing.length > 1 ? 's' : ''} don't have field ${fieldNum}: ` +
-        sample + (missing.length > 3 ? `, …` : '')
-      );
-      return;
-    }
-
     // Parse values according to type hint, respecting the missing sentinel
     const parseErrors = [];
     for (const e of extracted) {
-      // Treat as missing if the raw value matches the missing sentinel
-      if (missingStr !== '' && e.raw === missingStr) {
+      // Treat as missing if the field was absent or matches the missing sentinel
+      if (e.raw === null || (missingStr !== '' && e.raw === missingStr)) {
         e.value = '?';  // standard missing-data marker used throughout the app
         continue;
       }
