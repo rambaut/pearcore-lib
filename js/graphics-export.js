@@ -192,7 +192,7 @@ export function createGraphicsExporter({
         downloadBlob(blob, 'image/png', `${filename}.png`);
       }
     } else {
-      const svgStr = buildSvg({ fullView, transparent });
+      const svgStr = await buildSvg({ fullView, transparent });
       if (!svgStr) return;
       if (_saveHandler) {
         _saveHandler({
@@ -216,9 +216,9 @@ export function createGraphicsExporter({
    * Print via SVG injection.  Builds the SVG for the current view, injects
    * it into a hidden `#pt-print-layer`, then triggers the OS print dialog.
    */
-  function doPrint() {
+  async function doPrint() {
     if (!hasContent()) return;
-    const svgStr = buildSvg({ fullView: false, transparent: false });
+    const svgStr = await buildSvg({ fullView: false, transparent: false });
     if (!svgStr) return;
 
     let layer = document.getElementById('pt-print-layer');
