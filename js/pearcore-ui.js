@@ -503,6 +503,9 @@ function buildHelpAboutHTML(opts = {}) {
 <div id="help-panel">
   <div id="help-panel-header">
     <h2>${helpTitle}</h2>
+    <select id="help-jump-select" aria-label="Jump to help section" title="Jump to section" style="display:none">
+      <option value="">Jump to section...</option>
+    </select>
     <button id="btn-help-close" title="Close help">&times;</button>
   </div>
   <div id="help-panel-body">
@@ -823,11 +826,60 @@ function initHelpAbout(root, opts = {}) {
 
   // ── Help panel ──────────────────────────────────────────────────────────
   const helpPanel    = $('help-panel');
+  const helpPanelBody = $('help-panel-body');
   const helpContent  = $('help-content');
+  const helpJumpSelect = $('help-jump-select');
   const btnHelp      = $('btn-help');
   const btnHelpClose = $('btn-help-close');
   let helpLoaded = false;
   if (helpPanel) helpPanel.inert = true;
+
+  function _slugifyHeading(text) {
+    return String(text || '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-');
+  }
+
+  function _buildHelpJumpMenu() {
+    if (!helpJumpSelect || !helpContent) return;
+    const headings = [...helpContent.querySelectorAll('h2')];
+    if (headings.length === 0) {
+      helpJumpSelect.style.display = 'none';
+      helpJumpSelect.disabled = true;
+      return;
+    }
+
+    // Ensure stable unique ids so we can deep-link within the help panel.
+    const used = new Set();
+    for (const h of headings) {
+      if (h.id && !used.has(h.id)) {
+        used.add(h.id);
+        continue;
+      }
+      const base = _slugifyHeading(h.textContent) || 'section';
+      let id = base;
+      let n = 2;
+      while (used.has(id)) {
+        id = `${base}-${n}`;
+        n += 1;
+      }
+      h.id = id;
+      used.add(id);
+    }
+
+    helpJumpSelect.innerHTML = '<option value="">Jump to section...</option>';
+    for (const h of headings) {
+      const opt = document.createElement('option');
+      opt.value = h.id;
+      opt.textContent = h.textContent.trim();
+      helpJumpSelect.appendChild(opt);
+    }
+    helpJumpSelect.disabled = false;
+    helpJumpSelect.style.display = '';
+  }
 
   // ── About panel ─────────────────────────────────────────────────────────
   const aboutPanel    = $('about-panel');
@@ -844,6 +896,7 @@ function initHelpAbout(root, opts = {}) {
       try {
         const md = await opts.fetchContent(opts.helpFile || 'help.md');
         helpContent.innerHTML = marked.parse(md);
+        _buildHelpJumpMenu();
         helpLoaded = true;
       } catch (err) {
         helpContent.innerHTML = `<p style="color:var(--pt-red)">Could not load help: ${err.message}</p>`;
@@ -891,6 +944,16 @@ function initHelpAbout(root, opts = {}) {
   // Wire up buttons
   if (btnHelp)      btnHelp.addEventListener('click', e => { e.stopPropagation(); helpPanel?.classList.contains('open') ? closeHelp() : openHelp(); });
   if (btnHelpClose) btnHelpClose.addEventListener('click', closeHelp);
+  if (helpJumpSelect) {
+    helpJumpSelect.addEventListener('change', () => {
+      const id = helpJumpSelect.value;
+      if (!id) return;
+      const target = helpContent?.querySelector(`#${CSS.escape(id)}`);
+      if (!target) return;
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (helpPanelBody) helpPanelBody.focus?.();
+    });
+  }
   if (btnAbout)     btnAbout.addEventListener('click', e => { e.stopPropagation(); aboutPanel?.classList.contains('open') ? closeAbout() : openAbout(); });
   if (btnAboutClose) btnAboutClose.addEventListener('click', closeAbout);
   if (aboutBackdrop) aboutBackdrop.addEventListener('click', closeAbout);
