@@ -381,6 +381,333 @@ export function resolveEmbedConfig({ configKey, settingsKeyDefault, flagDefs, ex
 }
 
 
+// ── Side Panel Controller ───────────────────────────────────────────────
+
+/**
+ * Create a slide-out side panel controller with open / close / pin state.
+ *
+ * This is a small reusable shell controller for apps that need a panel drawer
+ * with a pin button and an optional persistent pinned state.
+ *
+ * @param {object} opts
+ * @param {HTMLElement} opts.panel
+ * @param {HTMLElement} [opts.toggleButton]
+ * @param {HTMLElement} [opts.closeButton]
+ * @param {HTMLElement} [opts.pinButton]
+ * @param {HTMLElement} [opts.bodyEl=document.body]
+ * @param {Window} [opts.windowRef=window]
+ * @param {string} [opts.storageKey]
+ * @param {string} [opts.pinnedBodyClass]
+ * @param {boolean} [opts.initialPinned]
+ * @param {boolean} [opts.initialOpen]
+ * @param {boolean} [opts.enabled=true]
+ * @param {boolean} [opts.advancedToggle=false]
+ * @param {Function} [opts.onStateChange]
+ * @returns {{ open: Function, close: Function, pin: Function, unpin: Function, toggle: Function, isOpen: Function, isPinned: Function, bindUI: Function, onChange: Function }}
+ */
+export function createSidePanelController({
+  panel,
+  toggleButton,
+  closeButton,
+  pinButton,
+  bodyEl = document.body,
+  windowRef = window,
+  storageKey = null,
+  pinnedBodyClass = '',
+  initialPinned,
+  initialOpen,
+  enabled = true,
+  advancedToggle = false,
+  onStateChange,
+} = {}) {
+  let pinned = false;
+  let _onChange = null;
+
+  if (panel) panel.inert = true;
+
+  function _syncPinButton() {
+    if (!pinButton) return;
+    pinButton.classList.toggle('active', pinned);
+    pinButton.title = pinned ? 'Unpin' : 'Pin open';
+    pinButton.innerHTML = pinned
+      ? '<i class="bi bi-pin-angle-fill"></i>'
+      : '<i class="bi bi-pin-angle"></i>';
+  }
+
+  function _setBodyPinned(on) {
+    if (!bodyEl || !pinnedBodyClass) return;
+    bodyEl.classList.toggle(pinnedBodyClass, !!on);
+  }
+
+  function _notify() {
+    _onChange?.(isOpen(), pinned);
+    onStateChange?.();
+  }
+
+  function _resize() {
+    windowRef?.dispatchEvent?.(new Event('resize'));
+  }
+
+  function open(advanced) {
+    if (!panel) return;
+    panel.classList.add('open');
+    panel.classList.remove('pinned');
+    panel.inert = false;
+    if (advancedToggle) panel.classList.toggle('advanced', !!advanced);
+    if (pinned) {
+      panel.classList.add('pinned');
+      _setBodyPinned(true);
+    }
+    toggleButton?.classList.add('active');
+    _syncPinButton();
+    _resize();
+    _notify();
+  }
+
+  function close() {
+    if (!panel) return;
+    panel.classList.remove('open', 'advanced', 'pinned');
+    panel.inert = true;
+    pinned = false;
+    if (storageKey) {
+      try { localStorage.removeItem(storageKey); } catch {}
+    }
+    _setBodyPinned(false);
+    toggleButton?.classList.remove('active');
+    _syncPinButton();
+    _resize();
+    _notify();
+  }
+
+  function pin() {
+    if (!panel) return;
+    pinned = true;
+    if (storageKey) {
+      try { localStorage.setItem(storageKey, '1'); } catch {}
+    }
+    panel.classList.add('open', 'pinned');
+    panel.inert = false;
+    _setBodyPinned(true);
+    toggleButton?.classList.add('active');
+    _syncPinButton();
+    _resize();
+    _notify();
+  }
+
+  function unpin() {
+    if (!panel) return;
+    pinned = false;
+    if (storageKey) {
+      try { localStorage.removeItem(storageKey); } catch {}
+    }
+    panel.classList.remove('pinned');
+    _setBodyPinned(false);
+    _syncPinButton();
+    _resize();
+    _notify();
+  }
+
+  function toggle(advanced) {
+    if (!panel) return;
+    if (panel.classList.contains('open')) close();
+    else open(advanced);
+  }
+
+  function bindUI({ toggleButton: btnToggle, closeButton: btnClose, pinButton: btnPin } = {}) {
+    btnToggle?.addEventListener('click', e => {
+      e.stopPropagation();
+      toggle(e.altKey);
+    });
+    btnClose?.addEventListener('click', close);
+    btnPin?.addEventListener('click', () => (pinned ? unpin() : pin()));
+  }
+
+  if (panel && enabled !== false) {
+    const wasPinned = initialPinned ?? (storageKey ? (() => {
+      try { return localStorage.getItem(storageKey) === '1'; } catch { return false; }
+    })() : false);
+    const wasOpen = initialOpen ?? false;
+    if (wasPinned) pin();
+    else if (wasOpen) open();
+    else _syncPinButton();
+  }
+
+  return {
+    open,
+    close,
+    pin,
+    unpin,
+    toggle,
+    isOpen: () => panel?.classList.contains('open') ?? false,
+    isPinned: () => pinned,
+    bindUI,
+    onChange: (fn) => { _onChange = fn; },
+  };
+}
+
+
+// ── Accordion Sections ─────────────────────────────────────────────────
+
+/**
+ * Create a simple one-open-at-a-time accordion for custom section stacks.
+ *
+ * The controller is intentionally generic so apps can use their own section
+ * classes and panel chrome without inheriting the pearcore palette layout.
+ *
+ * @param {HTMLElement} root
+ * @param {object} opts
+ * @param {string} [opts.sectionSelector='.sx-settings-section']
+ * @param {string} [opts.headerSelector=':scope > h3']
+ * @param {string} [opts.storageKey]
+ * @param {string} [opts.defaultOpenSectionId]
+ * @returns {{ refresh: Function, openSection: Function, closeAll: Function }}
+ */
+export function initAccordionSections(root, {
+  sectionSelector = '.sx-settings-section',
+  headerSelector = ':scope > h3',
+  storageKey = null,
+  defaultOpenSectionId = null,
+} = {}) {
+  if (!root) return { refresh() {}, openSection() {}, closeAll() {} };
+
+  const sectionMap = new Map();
+
+  function _loadState() {
+    if (!storageKey) return null;
+    try { return localStorage.getItem(storageKey) || ''; } catch { return ''; }
+  }
+
+  function _saveState(sectionId) {
+    if (!storageKey) return;
+    try {
+      if (sectionId) localStorage.setItem(storageKey, sectionId);
+      else localStorage.removeItem(storageKey);
+    } catch {}
+  }
+
+  function _ensureSection(section) {
+    if (!section || sectionMap.has(section)) return sectionMap.get(section) || null;
+
+    const header = section.querySelector(headerSelector);
+    if (!header) return null;
+
+    if (!section.dataset.accordionId) {
+      section.dataset.accordionId = section.id || header.textContent.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    }
+
+    let body = section.querySelector(':scope > .sx-accordion-body');
+    if (!body) {
+      body = document.createElement('div');
+      body.className = 'sx-accordion-body';
+      const inner = document.createElement('div');
+      inner.className = 'sx-accordion-body-inner';
+      while (header.nextSibling) inner.appendChild(header.nextSibling);
+      body.appendChild(inner);
+      section.appendChild(body);
+    }
+
+    if (!header.querySelector('.sx-accordion-toggle')) {
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'sx-accordion-toggle';
+      toggle.title = 'Toggle section';
+      toggle.innerHTML = '<i class="bi bi-chevron-right"></i>';
+      header.appendChild(toggle);
+    }
+
+    const api = { section, header, body };
+    sectionMap.set(section, api);
+
+    header.addEventListener('click', e => {
+      if (e.target.closest('.sx-accordion-toggle')) return;
+      toggleSection(section);
+    });
+    header.addEventListener('keydown', e => {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('.sx-accordion-toggle')) {
+        e.preventDefault();
+        toggleSection(section);
+      }
+    });
+    const btn = header.querySelector('.sx-accordion-toggle');
+    btn?.addEventListener('click', e => {
+      e.stopPropagation();
+      toggleSection(section);
+    });
+
+    return api;
+  }
+
+  function _sections() {
+    return Array.from(root.querySelectorAll(sectionSelector)).map(_ensureSection).filter(Boolean);
+  }
+
+  function _isVisible(section) {
+    return section?.style?.display !== 'none' && section?.hidden !== true;
+  }
+
+  function _setOpen(section, open) {
+    if (!section) return;
+    const api = _ensureSection(section);
+    if (!api) return;
+    const toggle = api.header.querySelector('.sx-accordion-toggle i');
+    section.classList.toggle('is-open', !!open);
+    api.body.style.display = open ? '' : 'none';
+    if (toggle) toggle.className = open ? 'bi bi-chevron-down' : 'bi bi-chevron-right';
+  }
+
+  function closeAll() {
+    for (const { section } of _sections()) _setOpen(section, false);
+    _saveState('');
+  }
+
+  function openSection(sectionId) {
+    const api = _sections().find(({ section }) => section.dataset.accordionId === sectionId || section.id === sectionId);
+    if (!api) return;
+    for (const { section } of _sections()) {
+      if (section !== api.section) _setOpen(section, false);
+    }
+    _setOpen(api.section, true);
+    _saveState(api.section.dataset.accordionId || api.section.id || '');
+  }
+
+  function refresh({ defaultOpenSectionId: overrideDefaultOpenSectionId } = {}) {
+    const visibleSections = _sections().filter(({ section }) => _isVisible(section));
+    if (!visibleSections.length) {
+      closeAll();
+      return;
+    }
+
+    const desiredOpenId = _loadState() || overrideDefaultOpenSectionId || defaultOpenSectionId || visibleSections[0].section.dataset.accordionId;
+    const desired = visibleSections.find(({ section }) => section.dataset.accordionId === desiredOpenId || section.id === desiredOpenId);
+    const nextOpen = desired?.section || visibleSections[0].section;
+
+    for (const { section } of visibleSections) {
+      _setOpen(section, section === nextOpen);
+    }
+
+    _saveState(nextOpen.dataset.accordionId || nextOpen.id || '');
+  }
+
+  function toggleSection(section) {
+    const api = _ensureSection(section);
+    if (!api || !_isVisible(api.section)) return;
+    const isOpen = api.section.classList.contains('is-open');
+    if (isOpen) {
+      _setOpen(api.section, false);
+      _saveState('');
+      return;
+    }
+    for (const { section: other } of _sections()) {
+      if (other !== api.section && _isVisible(other)) _setOpen(other, false);
+    }
+    _setOpen(api.section, true);
+    _saveState(api.section.dataset.accordionId || api.section.id || '');
+  }
+
+  return { refresh, openSection, closeAll };
+}
+
+
 // ── Section Accordion ─────────────────────────────────────────────────────
 
 /**
