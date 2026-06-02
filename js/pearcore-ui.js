@@ -47,6 +47,60 @@ ${footer ? `\n    <div${footerId ? ` id="${footerId}"` : ''} class="pt-modal-foo
 }
 
 /**
+ * Build a standardized side-panel header shell with optional custom content
+ * and standard pin/close buttons.
+ *
+ * @param {object} opts
+ * @param {string} [opts.id]
+ * @param {string} [opts.headerClass='pt-side-panel-header']
+ * @param {number|string} [opts.height=24]     - px number or CSS height string
+ * @param {string} [opts.leftHTML='']          - left slot content (title, badges)
+ * @param {string} [opts.actionsHTML='']       - right slot custom action buttons
+ * @param {string} [opts.pinButtonId='']
+ * @param {string} [opts.closeButtonId='']
+ * @param {string} [opts.pinTitle='Pin panel open']
+ * @param {string} [opts.closeTitle='Close']
+ * @returns {string}
+ */
+function buildSidePanelHeaderHTML(opts = {}) {
+  const {
+    id = '',
+    headerClass = 'pt-side-panel-header',
+    height = 24,
+    leftHTML = '',
+    actionsHTML = '',
+    side = 'left',
+    buttonOrder = 'pin-close',
+    pinButtonId = '',
+    closeButtonId = '',
+    pinTitle = 'Pin panel open',
+    closeTitle = 'Close',
+  } = opts;
+
+  const hVal = typeof height === 'number' ? `${height}px` : String(height || '24px');
+  const idAttr = id ? ` id="${id}"` : '';
+  const pinIdAttr = pinButtonId ? ` id="${pinButtonId}"` : '';
+  const closeIdAttr = closeButtonId ? ` id="${closeButtonId}"` : '';
+
+  const pinBtn = `<button${pinIdAttr} class="pt-side-panel-icon-btn" title="${pinTitle}"><i class="bi bi-pin-angle"></i></button>`;
+  const closeBtn = `<button${closeIdAttr} class="pt-side-panel-icon-btn" title="${closeTitle}"><i class="bi bi-x-lg"></i></button>`;
+  const stdButtons = buttonOrder === 'close-pin'
+    ? `${closeBtn}${pinBtn}`
+    : `${pinBtn}${closeBtn}`;
+
+  const isRight = String(side).toLowerCase() === 'right';
+
+  return `\
+<div${idAttr} class="${headerClass}" style="--pt-side-panel-header-h:${hVal}">
+  ${isRight ? `<div class="pt-side-panel-header-leading">${stdButtons}</div>` : ''}
+  <div class="pt-side-panel-header-left">${leftHTML}</div>
+  <div class="pt-side-panel-header-actions">
+    ${actionsHTML}${isRight ? '' : stdButtons}
+  </div>
+</div>`;
+}
+
+/**
  * Build a generic "Open File" dialog with File / URL / Example tabs.
  *
  * All element IDs are prefixed with `opts.prefix` so multiple dialogs can
@@ -1072,3 +1126,5 @@ function initCoreUIBindings(root, opts = {}) {
 
   return { palette, helpAbout };
 }
+
+window.buildSidePanelHeaderHTML = buildSidePanelHeaderHTML;

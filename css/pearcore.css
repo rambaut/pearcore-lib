@@ -833,12 +833,7 @@
 #palette-panel.pinned { transform: translateX(0); box-shadow: none; }
 
 #palette-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 8px 8px 16px;
-  border-bottom: 1px solid var(--pt-divider);
-  flex-shrink: 0;
+  padding-left: 10px;
 }
 #palette-panel-header h2 {
   font-size: 0.72rem;
@@ -847,25 +842,6 @@
   margin: 0;
   letter-spacing: 0.3px;
 }
-#btn-palette-pin, #btn-palette-close {
-  background: none;
-  border: none;
-  color: var(--pt-off-white);
-  line-height: 1;
-  padding: 2px 6px;
-  border-radius: 3px;
-  opacity: 0.5;
-  cursor: pointer;
-}
-#btn-palette-pin  { font-size: 0.85rem; }
-#btn-palette-close { font-size: 1.1rem; }
-#btn-palette-pin:hover,
-#btn-palette-close:hover { background: var(--pt-surface-hover); opacity: 1; }
-#btn-palette-pin.active {
-  color: var(--pt-primary);
-  opacity: 1;
-}
-.palette-pin-btns { display: flex; align-items: center; gap: 0; }
 #palette-panel-body {
   flex: 1;
   min-height: 0;
@@ -1168,6 +1144,64 @@
   cursor: pointer;
   background: none;
   justify-self: start;
+}
+
+/* ── Generic side-panel header shell ── */
+.pt-side-panel-header {
+  --pt-side-panel-header-h: 24px;
+  flex-shrink: 0;
+  height: var(--pt-side-panel-header-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  border-bottom: 1px solid var(--pt-divider);
+  user-select: none;
+  padding: 0 4px;
+}
+.pt-side-panel-header-left {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pt-side-panel-header-leading {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.pt-side-panel-header-left:empty {
+  display: none;
+  flex: 0 0 auto;
+}
+.pt-side-panel-header-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.pt-side-panel-icon-btn {
+  background: none;
+  border: none;
+  color: var(--pt-text-icon);
+  padding: 2px 4px;
+  line-height: 1;
+  font-size: 0.82rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  opacity: 0.5;
+}
+.pt-side-panel-icon-btn:hover {
+  background: var(--pt-surface-hover);
+  opacity: 1;
+  color: var(--pt-text-icon-hover);
+}
+.pt-side-panel-icon-btn.active {
+  color: var(--pt-gold);
+  opacity: 1;
 }
 /* ── Panel swatch-popup colour picker ─────────────────────────────────────── */
 /* Trigger button */

@@ -545,6 +545,305 @@ export function createSidePanelController({
   };
 }
 
+/**
+ * Sync a panel pin button's icon, title, and active state.
+ *
+ * @param {HTMLElement|null} button
+ * @param {boolean} pinned
+ * @param {object} [opts]
+ * @param {string} [opts.activeClass='active']
+ * @param {string} [opts.iconSelector='i']
+ * @param {string} [opts.iconPinned='bi bi-pin-angle-fill']
+ * @param {string} [opts.iconUnpinned='bi bi-pin-angle']
+ * @param {string} [opts.titlePinned='Unpin panel']
+ * @param {string} [opts.titleUnpinned='Pin panel open']
+ */
+export function syncPanelPinButtonState(button, pinned, {
+  activeClass = 'active',
+  iconSelector = 'i',
+  iconPinned = 'bi bi-pin-angle-fill',
+  iconUnpinned = 'bi bi-pin-angle',
+  titlePinned = 'Unpin panel',
+  titleUnpinned = 'Pin panel open',
+} = {}) {
+  if (!button) return;
+  button.classList.toggle(activeClass, !!pinned);
+  button.title = pinned ? titlePinned : titleUnpinned;
+  const icon = button.querySelector(iconSelector);
+  if (icon) icon.className = pinned ? iconPinned : iconUnpinned;
+}
+
+/**
+ * Create a generic drag-resize controller for side panels.
+ *
+ * The caller decides whether resize is currently enabled (for example, only
+ * while pinned). Width is applied to the panel directly and can optionally be
+ * mirrored to a CSS variable.
+ *
+ * @param {object} opts
+ * @param {HTMLElement} opts.panel
+ * @param {HTMLElement} opts.handle
+ * @param {'left'|'right'} [opts.side='right']
+ * @param {number} [opts.minWidth=120]
+ * @param {number} [opts.maxWidth=1200]
+ * @param {string} [opts.ghostId='pt-panel-resize-ghost']
+ * @param {string|null} [opts.cssVarName=null]
+ * @param {HTMLElement} [opts.cssVarTarget=document.documentElement]
+ * @param {HTMLElement} [opts.cursorTarget=document.body]
+ * @param {boolean} [opts.disableTransitionOnCommit=true]
+ * @param {Function} [opts.isEnabled]         - () => boolean
+ * @param {Function} [opts.onCommit]          - (newWidthPx:number, widthCss:string) => void
+ * @returns {{ destroy: Function, isDragging: Function }}
+ */
+export function createPanelResizeController({
+  panel,
+  handle,
+  side = 'right',
+  minWidth = 120,
+  maxWidth = 1200,
+  ghostId = 'pt-panel-resize-ghost',
+  cssVarName = null,
+  cssVarTarget = document.documentElement,
+  cursorTarget = document.body,
+  disableTransitionOnCommit = true,
+  isEnabled = () => true,
+  onCommit,
+} = {}) {
+  if (!panel || !handle) {
+    return { destroy() {}, isDragging: () => false };
+  }
+
+  const _ghost = (() => {
+    let el = document.getElementById(ghostId);
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = ghostId;
+    document.body.appendChild(el);
+    return el;
+  })();
+
+  let _dragging = false;
+  let _x0 = 0;
+  let _w0 = 0;
+
+  function _clampWidth(w) {
+    return Math.max(minWidth, Math.min(maxWidth, w));
+  }
+
+  function _widthFromPointer(clientX) {
+    const delta = side === 'left' ? (clientX - _x0) : (_x0 - clientX);
+    return _clampWidth(_w0 + delta);
+  }
+
+  function _positionGhost(newW) {
+    const rect = panel.getBoundingClientRect();
+    const x = side === 'left' ? (rect.left + newW) : (rect.right - newW);
+    _ghost.style.left = `${x}px`;
+  }
+
+  function _onMouseDown(e) {
+    if (!isEnabled?.()) return;
+    _dragging = true;
+    _x0 = e.clientX;
+    _w0 = panel.offsetWidth;
+    _positionGhost(_w0);
+    _ghost.style.display = 'block';
+    if (cursorTarget) cursorTarget.style.cursor = 'ew-resize';
+    e.preventDefault();
+  }
+
+  function _onMouseMove(e) {
+    if (!_dragging) return;
+    _positionGhost(_widthFromPointer(e.clientX));
+  }
+
+  function _onMouseUp(e) {
+    if (!_dragging) return;
+    _dragging = false;
+    _ghost.style.display = 'none';
+    if (cursorTarget) cursorTarget.style.cursor = '';
+
+    const newW = _widthFromPointer(e.clientX);
+    const cssW = `${newW}px`;
+    const prevTransition = panel.style.transition;
+
+    if (disableTransitionOnCommit) panel.style.transition = 'none';
+    panel.style.width = cssW;
+    if (cssVarName && cssVarTarget) cssVarTarget.style.setProperty(cssVarName, cssW);
+    void panel.offsetWidth;
+    if (disableTransitionOnCommit) {
+      requestAnimationFrame(() => { panel.style.transition = prevTransition; });
+    }
+
+    onCommit?.(newW, cssW);
+  }
+
+  handle.addEventListener('mousedown', _onMouseDown);
+  window.addEventListener('mousemove', _onMouseMove);
+  window.addEventListener('mouseup', _onMouseUp);
+
+  return {
+    destroy() {
+      handle.removeEventListener('mousedown', _onMouseDown);
+      window.removeEventListener('mousemove', _onMouseMove);
+      window.removeEventListener('mouseup', _onMouseUp);
+    },
+    isDragging: () => _dragging,
+  };
+}
+
+function _parseSizeToPx(value, panel) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string') return 0;
+  const s = value.trim();
+  if (!s) return 0;
+  if (s.endsWith('px')) {
+    const px = parseFloat(s);
+    return Number.isFinite(px) ? px : 0;
+  }
+  if (s.endsWith('%')) {
+    const pct = parseFloat(s);
+    if (!Number.isFinite(pct)) return 0;
+    const parentW = panel?.parentElement?.clientWidth ?? 0;
+    return parentW > 0 ? (parentW * pct / 100) : 0;
+  }
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Track stacked pinned side panels and expose reserved width per side.
+ *
+ * This manager does not impose layout by itself. It computes aggregate widths
+ * and writes CSS custom properties that host apps can consume.
+ *
+ * @param {object} [opts]
+ * @param {HTMLElement} [opts.targetEl=document.documentElement]
+ * @param {string} [opts.leftVar='--pt-side-left-w']
+ * @param {string} [opts.rightVar='--pt-side-right-w']
+ * @param {'accumulate'|'single-per-side'} [opts.policy='accumulate']
+ * @param {Function} [opts.onChange] - ({left:number,right:number}) => void
+ * @returns {{ setPanelState: Function, removePanel: Function, getReserved: Function, recompute: Function }}
+ */
+export function createSidePanelStackManager({
+  targetEl = document.documentElement,
+  leftVar = '--pt-side-left-w',
+  rightVar = '--pt-side-right-w',
+  policy = 'accumulate',
+  onChange,
+} = {}) {
+  const _state = new Map();
+  let _pinSeqCounter = 1;
+
+  function _effectiveWidth(panelState) {
+    if (!panelState) return 0;
+    if (!(panelState.open && panelState.pinned)) return 0;
+    if (Number.isFinite(panelState.widthPx)) return panelState.widthPx;
+    if (panelState.widthValue != null) {
+      return _parseSizeToPx(panelState.widthValue, panelState.panel);
+    }
+    if (panelState.panel) {
+      return panelState.panel.getBoundingClientRect().width || panelState.panel.offsetWidth || 0;
+    }
+    return 0;
+  }
+
+  function _sumSide(side) {
+    const items = [];
+    for (const st of _state.values()) {
+      if ((st.side || 'right') !== side) continue;
+      const w = _effectiveWidth(st);
+      if (w > 0) items.push({ order: st.order || 0, width: w });
+    }
+    if (items.length === 0) return 0;
+    if (policy === 'single-per-side') {
+      items.sort((a, b) => b.order - a.order);
+      return items[0].width;
+    }
+    return items.reduce((sum, it) => sum + it.width, 0);
+  }
+
+  function _applyPanelOffsets() {
+    for (const side of ['left', 'right']) {
+      const active = [];
+      for (const st of _state.values()) {
+        const panel = st.panel;
+        if (!panel || (st.side || 'right') !== side) continue;
+        const w = _effectiveWidth(st);
+        if (w <= 0) {
+          if (side === 'right') panel.style.right = '';
+          else panel.style.left = '';
+          continue;
+        }
+        active.push({
+          panel,
+          width: w,
+          pinSeq: Number.isFinite(st.pinSeq) ? st.pinSeq : Number.MAX_SAFE_INTEGER,
+          order: Number.isFinite(st.order) ? st.order : 0,
+        });
+      }
+
+      // Panel order controls stack placement: lower order hugs the side edge,
+      // higher order stacks inward (leftward on the right side, rightward on the left).
+      active.sort((a, b) => {
+        if (a.order !== b.order) return a.order - b.order;
+        return a.pinSeq - b.pinSeq;
+      });
+
+      let offset = 0;
+      for (const it of active) {
+        if (side === 'right') it.panel.style.right = `${offset}px`;
+        else it.panel.style.left = `${offset}px`;
+        offset += it.width;
+      }
+    }
+  }
+
+  function recompute() {
+    const left = _sumSide('left');
+    const right = _sumSide('right');
+    _applyPanelOffsets();
+    if (targetEl) {
+      targetEl.style.setProperty(leftVar, `${left}px`);
+      targetEl.style.setProperty(rightVar, `${right}px`);
+    }
+    onChange?.({ left, right });
+    return { left, right };
+  }
+
+  return {
+    setPanelState(id, next = {}) {
+      if (!id) return recompute();
+      const prev = _state.get(id) || {};
+      const nextOpen = next.open ?? prev.open ?? false;
+      const nextPinned = next.pinned ?? prev.pinned ?? false;
+      const wasActivePinned = !!(prev.open && prev.pinned);
+      const nowActivePinned = !!(nextOpen && nextPinned);
+      let nextPinSeq = prev.pinSeq;
+      if (nowActivePinned && !wasActivePinned) nextPinSeq = _pinSeqCounter++;
+      if (!nowActivePinned) nextPinSeq = undefined;
+
+      _state.set(id, {
+        side: next.side ?? prev.side ?? 'right',
+        panel: next.panel ?? prev.panel ?? null,
+        open: nextOpen,
+        pinned: nextPinned,
+        widthPx: Number.isFinite(next.widthPx) ? next.widthPx : prev.widthPx,
+        widthValue: next.widthValue ?? prev.widthValue,
+        order: Number.isFinite(next.order) ? next.order : (prev.order ?? Date.now()),
+        pinSeq: nextPinSeq,
+      });
+      return recompute();
+    },
+    removePanel(id) {
+      _state.delete(id);
+      return recompute();
+    },
+    getReserved: () => recompute(),
+    recompute,
+  };
+}
+
 
 // ── Accordion Sections ─────────────────────────────────────────────────
 
