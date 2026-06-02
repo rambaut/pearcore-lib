@@ -439,6 +439,10 @@ export function createSidePanelController({
     bodyEl.classList.toggle(pinnedBodyClass, !!on);
   }
 
+  function isOpen() {
+    return panel?.classList.contains('open') ?? false;
+  }
+
   function _notify() {
     _onChange?.(isOpen(), pinned);
     onStateChange?.();
@@ -538,7 +542,7 @@ export function createSidePanelController({
     pin,
     unpin,
     toggle,
-    isOpen: () => panel?.classList.contains('open') ?? false,
+    isOpen,
     isPinned: () => pinned,
     bindUI,
     onChange: (fn) => { _onChange = fn; },
