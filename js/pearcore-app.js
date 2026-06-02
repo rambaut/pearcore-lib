@@ -849,7 +849,7 @@ export function createSidePanelStackManager({
 }
 
 /**
- * Create a lightweight runtime controller for palette controls.
+ * Create a lightweight runtime controller for options controls.
  *
  * Provides delegated change/input/click wiring, get/set helpers, and basic
  * visibility/enabled state helpers so apps can avoid repetitive direct DOM
@@ -861,7 +861,7 @@ export function createSidePanelStackManager({
  * @param {Record<string, object>} [opts.controls] - controlId -> descriptor
  * @returns {{ register: Function, on: Function, off: Function, getValue: Function, setValue: Function, setVisible: Function, setEnabled: Function, getEl: Function, destroy: Function }}
  */
-export function createPaletteController({
+export function createOptionsController({
   root,
   scopeSelector = '#palette-panel',
   controls = {},
@@ -968,6 +968,197 @@ export function createPaletteController({
     },
   };
 }
+
+// Backward-compatible alias; prefer createOptionsController.
+export const createPaletteController = createOptionsController;
+
+
+// ── Declarative Options Behaviour ─────────────────────────────────────────
+
+/**
+ * Create a declarative behaviour layer for an options panel.
+ *
+ * This wraps createOptionsController() and adds two high-level capabilities:
+ *
+ * 1) Visibility rules
+ *    - Show/hide targets (rows, details, sections, or any element) from control values.
+ *
+ * 2) Cascading control chains
+ *    - Progressive chains where downstream controls are gated by upstream controls
+ *      (for example: shape2 only active when shape1 is not "off").
+ *
+ * @param {object} opts
+ * @param {Element|Document} opts.root
+ * @param {string} [opts.scopeSelector='#palette-panel']
+ * @param {Array<object>} [opts.rules=[]]
+ * @param {Array<object>} [opts.cascades=[]]
+ * @returns {{
+ *   options: ReturnType<typeof createOptionsController>,
+ *   palette: ReturnType<typeof createOptionsController>,
+ *   evaluate: Function,
+ *   setRules: Function,
+ *   setCascades: Function,
+ *   destroy: Function,
+ * }}
+ */
+export function createDeclarativeOptionsController({
+  root,
+  scopeSelector = '#palette-panel',
+  rules = [],
+  cascades = [],
+} = {}) {
+  const options = createOptionsController({ root, scopeSelector });
+  const _handlers = [];
+  const _memory = new Map(); // chainKey -> Array<string|null>
+  let _rules = Array.isArray(rules) ? rules.slice() : [];
+  let _cascades = Array.isArray(cascades) ? cascades.slice() : [];
+
+  function _toElement(target) {
+    if (!target) return null;
+    if (target instanceof Element) return target;
+    if (typeof target === 'string') {
+      if (target.startsWith('#') || target.startsWith('.') || target.includes(' ') || target.includes('[')) {
+        return root.querySelector(target);
+      }
+      return options.getEl(target);
+    }
+    return null;
+  }
+
+  function _targetFromControl(controlId, target) {
+    if (target) return _toElement(target);
+    const control = options.getEl(controlId);
+    if (!control) return null;
+    return control.closest('.pt-palette-row, .pt-detail, .pt-palette-section, .pt-sub-controls') || control;
+  }
+
+  function _setVisible(targetEl, visible, mode = 'auto') {
+    if (!targetEl) return;
+    const useDetailClass = mode === 'detail'
+      || (mode === 'auto' && targetEl.classList?.contains('pt-detail'));
+    if (useDetailClass) {
+      targetEl.classList.toggle('pt-detail-open', !!visible);
+      return;
+    }
+    targetEl.style.display = visible ? '' : 'none';
+  }
+
+  function _matchesCondition(value, rule) {
+    if (typeof rule.when === 'function') return !!rule.when(value, options);
+    if (rule.equals !== undefined) return value === rule.equals;
+    if (rule.notEquals !== undefined) return value !== rule.notEquals;
+    if (Array.isArray(rule.in)) return rule.in.includes(value);
+    if (Array.isArray(rule.notIn)) return !rule.notIn.includes(value);
+    if (rule.truthy) return !!value;
+    if (rule.falsy) return !value;
+    return !!value;
+  }
+
+  function _evaluateRules() {
+    for (const rule of _rules) {
+      const controlId = rule.control || rule.id;
+      if (!controlId) continue;
+      const value = options.getValue(controlId);
+      const visible = _matchesCondition(value, rule);
+      const targetEl = _targetFromControl(controlId, rule.target);
+      _setVisible(targetEl, visible, rule.mode || 'auto');
+    }
+  }
+
+  function _applyCascade(cascade) {
+    const controls = Array.isArray(cascade.controls) ? cascade.controls : [];
+    if (controls.length < 2) return;
+
+    const chainKey = cascade.id || controls.join('>');
+    const offValue = cascade.offValue ?? 'off';
+    const restore = cascade.restore !== false;
+    const memory = _memory.get(chainKey) || new Array(controls.length).fill(null);
+
+    for (let i = 1; i < controls.length; i++) {
+      const upstreamId = controls[i - 1];
+      const currentId = controls[i];
+      const upstreamValue = options.getValue(upstreamId);
+      const currentValue = options.getValue(currentId);
+      const gatedOff = upstreamValue === offValue || upstreamValue == null || upstreamValue === '';
+
+      if (gatedOff) {
+        if (currentValue != null && currentValue !== offValue && currentValue !== '') {
+          memory[i] = String(currentValue);
+        }
+        options.setValue(currentId, offValue);
+      } else if (restore && (currentValue == null || currentValue === '' || currentValue === offValue) && memory[i] != null) {
+        options.setValue(currentId, memory[i]);
+      }
+    }
+
+    _memory.set(chainKey, memory);
+  }
+
+  function _evaluateCascades() {
+    for (const cascade of _cascades) _applyCascade(cascade);
+  }
+
+  function evaluate() {
+    _evaluateCascades();
+    _evaluateRules();
+  }
+
+  function _registerHandlers() {
+    for (const rule of _rules) {
+      const id = rule.control || rule.id;
+      if (!id) continue;
+      const fn = () => evaluate();
+      options.on(id, fn);
+      _handlers.push({ id, fn });
+    }
+    for (const cascade of _cascades) {
+      const controls = Array.isArray(cascade.controls) ? cascade.controls : [];
+      for (const id of controls) {
+        const fn = () => evaluate();
+        options.on(id, fn);
+        _handlers.push({ id, fn });
+      }
+    }
+  }
+
+  function _clearHandlers() {
+    for (const { id, fn } of _handlers) options.off(id, fn);
+    _handlers.length = 0;
+  }
+
+  function setRules(nextRules = []) {
+    _rules = Array.isArray(nextRules) ? nextRules.slice() : [];
+    _clearHandlers();
+    _registerHandlers();
+    evaluate();
+  }
+
+  function setCascades(nextCascades = []) {
+    _cascades = Array.isArray(nextCascades) ? nextCascades.slice() : [];
+    _clearHandlers();
+    _registerHandlers();
+    evaluate();
+  }
+
+  _registerHandlers();
+  evaluate();
+
+  return {
+    options,
+    // Backward-compatible alias; prefer .options
+    palette: options,
+    evaluate,
+    setRules,
+    setCascades,
+    destroy() {
+      _clearHandlers();
+      options.destroy();
+    },
+  };
+}
+
+// Backward-compatible alias; prefer createDeclarativeOptionsController.
+export const createDeclarativePaletteController = createDeclarativeOptionsController;
 
 
 // ── Accordion Sections ─────────────────────────────────────────────────
