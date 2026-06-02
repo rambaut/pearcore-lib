@@ -1045,8 +1045,15 @@
 .pt-palette-row {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: subgrid;
+  grid-template-columns: max-content 1fr auto;
   align-items: center;
+}
+/* Use subgrid only when the row is inside a known palette grid container. */
+.pt-palette-grid > .pt-palette-row,
+.pt-section-body-inner > .pt-palette-row,
+.pt-sub-controls > .pt-palette-row,
+.pt-detail > .pt-palette-row {
+  grid-template-columns: subgrid;
 }
 /* Span rows: no label, own flex layout (e.g., theme button group) */
 .pt-palette-row--span {
