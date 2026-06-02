@@ -100,6 +100,164 @@ function buildSidePanelHeaderHTML(opts = {}) {
 </div>`;
 }
 
+function _escAttr(v) {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function _buildPaletteLabelHTML(row = {}) {
+  if (row.labelHTML) return row.labelHTML;
+  const icon = row.labelIcon ? ` <i class="${row.labelIcon}"></i>` : '';
+  const text = row.label != null ? _escAttr(row.label) : '';
+  return `<span class="pt-palette-label">${text}${icon}</span>`;
+}
+
+function _buildPaletteControlHTML(row = {}) {
+  const kind = row.kind || 'custom';
+
+  if (kind === 'select') {
+    const id = row.id ? ` id="${_escAttr(row.id)}"` : '';
+    const disabled = row.disabled ? ' disabled' : '';
+    const cls = _escAttr(row.className || 'pt-palette-select');
+    let optionsHTML = row.optionsHTML || '';
+    if (!optionsHTML && Array.isArray(row.options)) {
+      optionsHTML = row.options.map(opt => {
+        if (typeof opt === 'string') return `<option value="${_escAttr(opt)}">${_escAttr(opt)}</option>`;
+        const value = _escAttr(opt?.value ?? '');
+        const label = _escAttr(opt?.label ?? opt?.value ?? '');
+        const selected = opt?.selected ? ' selected' : '';
+        return `<option value="${value}"${selected}>${label}</option>`;
+      }).join('');
+    }
+    return `<select class="${cls}"${id}${disabled}>${optionsHTML}</select>`;
+  }
+
+  if (kind === 'range') {
+    const id = row.id ? ` id="${_escAttr(row.id)}"` : '';
+    const min = row.min != null ? ` min="${_escAttr(row.min)}"` : '';
+    const max = row.max != null ? ` max="${_escAttr(row.max)}"` : '';
+    const step = row.step != null ? ` step="${_escAttr(row.step)}"` : '';
+    const value = row.value != null ? ` value="${_escAttr(row.value)}"` : '';
+    const disabled = row.disabled ? ' disabled' : '';
+    const valId = row.valueId ? ` id="${_escAttr(row.valueId)}"` : '';
+    const valStyle = row.valueStyle ? ` style="${_escAttr(row.valueStyle)}"` : '';
+    const valText = _escAttr(row.valueText ?? row.value ?? '');
+    return `<input type="range" class="form-range"${id}${min}${max}${step}${value}${disabled} /><span class="pt-val"${valId}${valStyle}>${valText}</span>`;
+  }
+
+  if (kind === 'color') {
+    const id = row.id ? ` id="${_escAttr(row.id)}"` : '';
+    const value = row.value != null ? ` value="${_escAttr(row.value)}"` : '';
+    const disabled = row.disabled ? ' disabled' : '';
+    return `<input type="color" class="pt-palette-color"${id}${value}${disabled} />`;
+  }
+
+  if (kind === 'button') {
+    const id = row.id ? ` id="${_escAttr(row.id)}"` : '';
+    const cls = _escAttr(row.buttonClass || 'btn btn-sm btn-outline-secondary pt-configure-btn');
+    const title = row.buttonTitle ? ` title="${_escAttr(row.buttonTitle)}"` : '';
+    const icon = row.buttonIcon ? `<i class="${_escAttr(row.buttonIcon)}"></i> ` : '';
+    const text = _escAttr(row.buttonText ?? 'Configure');
+    return `<button class="${cls}"${id}${title}>${icon}${text}</button>`;
+  }
+
+  return row.controlHTML || '';
+}
+
+/**
+ * Build a single palette row using the shared 3-column row contract.
+ *
+ * @param {object} row
+ * @returns {string}
+ */
+function buildPaletteRowHTML(row = {}) {
+  if (row.html) return row.html;
+  const id = row.rowId ? ` id="${_escAttr(row.rowId)}"` : '';
+  const cls = _escAttr(row.rowClass || 'pt-palette-row');
+  const title = row.title ? ` title="${_escAttr(row.title)}"` : '';
+  const style = row.rowStyle ? ` style="${_escAttr(row.rowStyle)}"` : '';
+  const labelHTML = _buildPaletteLabelHTML(row);
+  const controlHTML = _buildPaletteControlHTML(row);
+  return `<div class="${cls}"${id}${title}${style}>${labelHTML}${controlHTML}</div>`;
+}
+
+function buildPaletteGroupHTML(group = {}) {
+  if (group.html) return group.html;
+  const id = group.id ? ` id="${_escAttr(group.id)}"` : '';
+  const cls = _escAttr(group.className || 'pt-detail');
+  const style = group.style ? ` style="${_escAttr(group.style)}"` : '';
+  const items = Array.isArray(group.items) ? group.items : [];
+  const body = items.map(buildPaletteSectionItemHTML).join('');
+  return `<div class="${cls}"${id}${style}>${body}</div>`;
+}
+
+function buildPaletteSectionItemHTML(item = {}) {
+  if (typeof item === 'string') return item;
+  if (!item || typeof item !== 'object') return '';
+  if (item.type === 'group') return buildPaletteGroupHTML(item);
+  if (item.type === 'row' || item.kind || item.controlHTML || item.labelHTML) {
+    return buildPaletteRowHTML(item);
+  }
+  if (item.type === 'html') return item.html || '';
+  if (item.html) return item.html;
+  return '';
+}
+
+/**
+ * Build a palette section from a descriptor object.
+ *
+ * @param {object} section
+ * @returns {string}
+ */
+function buildPaletteSectionHTML(section = {}) {
+  if (section.html) return section.html;
+  const secId = section.id ? ` id="${_escAttr(section.id)}"` : '';
+  const secClass = _escAttr(section.className || 'pt-palette-section');
+  const icon = section.icon ? `<i class="${_escAttr(section.icon)}"></i> ` : '';
+  const title = _escAttr(section.title || 'Section');
+  const rows = (section.rows || []).map(buildPaletteRowHTML).join('');
+  const items = Array.isArray(section.items) ? section.items : [];
+  const itemsHTML = items.map(buildPaletteSectionItemHTML).join('');
+  const bodyHTML = section.bodyHTML || '';
+  const afterHTML = section.afterHTML || '';
+  return `<div class="${secClass}"${secId}><h3>${icon}${title}</h3>${rows}${itemsHTML}${bodyHTML}${afterHTML}</div>`;
+}
+
+/**
+ * Build a complete left palette panel from descriptor objects.
+ *
+ * @param {object} def
+ * @returns {string}
+ */
+function buildPalettePanelFromDefinition(def = {}) {
+  const sections = Array.isArray(def.sections) ? def.sections : [];
+  const sectionHTML = sections
+    .map(sec => (typeof sec === 'string' ? sec : buildPaletteSectionHTML(sec)))
+    .join('');
+
+  const headerHTML = buildSidePanelHeaderHTML({
+    id: 'palette-panel-header',
+    headerClass: 'pt-side-panel-header',
+    height: 34,
+    side: 'left',
+    buttonOrder: 'pin-close',
+    leftHTML: '<h2><i class="bi bi-sliders me-1"></i>Visual Options</h2>',
+    pinButtonId: 'btn-palette-pin',
+    closeButtonId: 'btn-palette-close',
+    pinTitle: 'Pin panel open',
+    closeTitle: 'Close',
+    ...(def.header || {}),
+  });
+
+  const footerHTML = def.footerHTML ||
+    '<button id="btn-reset-settings" title="Reset all visual settings to their defaults"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset to defaults</button>';
+
+  return `<div id="palette-panel">\n  ${headerHTML}\n  <div id="palette-panel-body">\n    ${sectionHTML}\n  </div>\n  <div id="palette-panel-footer">\n    ${footerHTML}\n  </div>\n</div>`;
+}
+
 /**
  * Build a generic "Open File" dialog with File / URL / Example tabs.
  *
@@ -1128,3 +1286,8 @@ function initCoreUIBindings(root, opts = {}) {
 }
 
 window.buildSidePanelHeaderHTML = buildSidePanelHeaderHTML;
+window.buildPaletteRowHTML = buildPaletteRowHTML;
+window.buildPaletteGroupHTML = buildPaletteGroupHTML;
+window.buildPaletteSectionItemHTML = buildPaletteSectionItemHTML;
+window.buildPaletteSectionHTML = buildPaletteSectionHTML;
+window.buildPalettePanelFromDefinition = buildPalettePanelFromDefinition;

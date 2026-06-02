@@ -844,6 +844,127 @@ export function createSidePanelStackManager({
   };
 }
 
+/**
+ * Create a lightweight runtime controller for palette controls.
+ *
+ * Provides delegated change/input/click wiring, get/set helpers, and basic
+ * visibility/enabled state helpers so apps can avoid repetitive direct DOM
+ * event binding for each control.
+ *
+ * @param {object} opts
+ * @param {Element|Document} opts.root
+ * @param {string} [opts.scopeSelector='#palette-panel']
+ * @param {Record<string, object>} [opts.controls] - controlId -> descriptor
+ * @returns {{ register: Function, on: Function, off: Function, getValue: Function, setValue: Function, setVisible: Function, setEnabled: Function, getEl: Function, destroy: Function }}
+ */
+export function createPaletteController({
+  root,
+  scopeSelector = '#palette-panel',
+  controls = {},
+} = {}) {
+  const _root = root || document;
+  const _handlers = new Map();
+  const _controls = new Map(Object.entries(controls || {}));
+
+  function _scopeEl() {
+    return scopeSelector ? _root.querySelector(scopeSelector) : _root;
+  }
+
+  function getEl(id) {
+    if (!id) return null;
+    return _scopeEl()?.querySelector(`#${CSS.escape(id)}`) || null;
+  }
+
+  function _valueFromEl(el) {
+    if (!el) return undefined;
+    if (el.type === 'checkbox' || el.type === 'radio') return !!el.checked;
+    return el.value;
+  }
+
+  function _emit(id, type, value, event, el) {
+    const list = _handlers.get(id);
+    if (!list || !list.length) return;
+    for (const fn of list) {
+      try { fn({ id, type, value, event, element: el, control: _controls.get(id) || null }); }
+      catch { /* ignore handler errors */ }
+    }
+  }
+
+  function _findControlElFromEvent(target) {
+    if (!target || !_scopeEl()) return null;
+    return target.closest('input, select, textarea, button');
+  }
+
+  function _handleInputLike(eventType, event) {
+    const el = _findControlElFromEvent(event.target);
+    if (!el || !el.id) return;
+    _emit(el.id, eventType, _valueFromEl(el), event, el);
+  }
+
+  function _onInput(e) { _handleInputLike('input', e); }
+  function _onChange(e) { _handleInputLike('change', e); }
+  function _onClick(e) {
+    const el = _findControlElFromEvent(e.target);
+    if (!el || !el.id) return;
+    if (el.tagName !== 'BUTTON' && el.type !== 'button') return;
+    _emit(el.id, 'click', _valueFromEl(el), e, el);
+  }
+
+  _root.addEventListener('input', _onInput);
+  _root.addEventListener('change', _onChange);
+  _root.addEventListener('click', _onClick);
+
+  return {
+    register(map = {}) {
+      for (const [id, def] of Object.entries(map)) _controls.set(id, def || {});
+    },
+    on(id, fn) {
+      if (!id || typeof fn !== 'function') return;
+      const list = _handlers.get(id) || [];
+      list.push(fn);
+      _handlers.set(id, list);
+    },
+    off(id, fn) {
+      const list = _handlers.get(id);
+      if (!list || !list.length) return;
+      const idx = list.indexOf(fn);
+      if (idx >= 0) list.splice(idx, 1);
+      if (!list.length) _handlers.delete(id);
+    },
+    getEl,
+    getValue(id) {
+      return _valueFromEl(getEl(id));
+    },
+    setValue(id, value) {
+      const el = getEl(id);
+      if (!el) return;
+      if (el.type === 'checkbox' || el.type === 'radio') {
+        el.checked = !!value;
+      } else {
+        el.value = value == null ? '' : String(value);
+      }
+    },
+    setVisible(id, visible, { rowOnly = false } = {}) {
+      const el = getEl(id);
+      if (!el) return;
+      const target = rowOnly ? (el.closest('.pt-palette-row') || el) : (el.closest('.pt-palette-row, .pt-detail, .pt-sub-controls') || el);
+      target.style.display = visible ? '' : 'none';
+    },
+    setEnabled(id, enabled) {
+      const el = getEl(id);
+      if (!el) return;
+      el.disabled = !enabled;
+    },
+    destroy() {
+      _root.removeEventListener('input', _onInput);
+      _root.removeEventListener('change', _onChange);
+      _root.removeEventListener('click', _onClick);
+      _handlers.clear();
+      _controls.clear();
+    },
+  };
+}
+
 
 // ── Accordion Sections ─────────────────────────────────────────────────
 
