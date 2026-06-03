@@ -1175,6 +1175,12 @@ export const createDeclarativePaletteController = createDeclarativeOptionsContro
  * @param {string} [opts.headerSelector=':scope > h3']
  * @param {string} [opts.storageKey]
  * @param {string} [opts.defaultOpenSectionId]
+ * @param {Record<string, {
+ *   forceOpen?: boolean,
+ *   lockOpen?: boolean,
+ *   forcePinned?: boolean,
+ *   hideChevronControl?: boolean,
+ * }>} [opts.sectionPolicy] - per-section policy keyed by element id or accordion id
  * @returns {{ refresh: Function, openSection: Function, closeAll: Function }}
  */
 export function initAccordionSections(root, {
@@ -1182,10 +1188,30 @@ export function initAccordionSections(root, {
   headerSelector = ':scope > h3',
   storageKey = null,
   defaultOpenSectionId = null,
+  sectionPolicy = {},
 } = {}) {
   if (!root) return { refresh() {}, openSection() {}, closeAll() {} };
 
   const sectionMap = new Map();
+
+  function _sectionPolicy(section) {
+    if (!section) return {};
+    return sectionPolicy[section.id] || sectionPolicy[section.dataset.accordionId] || {};
+  }
+
+  function _isForcedOpen(section) {
+    const policy = _sectionPolicy(section);
+    return !!(policy.forceOpen || policy.forcePinned);
+  }
+
+  function _applySectionChromePolicy(section) {
+    const policy = _sectionPolicy(section);
+    const toggle = section?.querySelector(':scope > h3 .sx-accordion-toggle');
+    if (!toggle) return;
+    const hideToggle = !!(policy.hideChevronControl || policy.lockOpen || policy.forceOpen || policy.forcePinned);
+    toggle.style.display = hideToggle ? 'none' : '';
+    toggle.setAttribute('aria-hidden', hideToggle ? 'true' : 'false');
+  }
 
   function _loadState() {
     if (!storageKey) return null;
@@ -1230,6 +1256,8 @@ export function initAccordionSections(root, {
       header.appendChild(toggle);
     }
 
+    _applySectionChromePolicy(section);
+
     const api = { section, header, body };
     sectionMap.set(section, api);
 
@@ -1264,22 +1292,25 @@ export function initAccordionSections(root, {
     if (!section) return;
     const api = _ensureSection(section);
     if (!api) return;
+    const forcedOpen = _isForcedOpen(section);
     const toggle = api.header.querySelector('.sx-accordion-toggle i');
-    section.classList.toggle('is-open', !!open);
-    api.body.style.display = open ? '' : 'none';
-    if (toggle) toggle.className = open ? 'bi bi-chevron-down' : 'bi bi-chevron-right';
+    const nextOpen = forcedOpen ? true : !!open;
+    section.classList.toggle('is-open', nextOpen);
+    api.body.style.display = nextOpen ? '' : 'none';
+    if (toggle) toggle.className = nextOpen ? 'bi bi-chevron-down' : 'bi bi-chevron-right';
   }
 
   function closeAll() {
     for (const { section } of _sections()) _setOpen(section, false);
-    _saveState('');
+    const forcedVisible = _sections().find(({ section }) => _isVisible(section) && _isForcedOpen(section));
+    _saveState(forcedVisible?.section?.dataset.accordionId || forcedVisible?.section?.id || '');
   }
 
   function openSection(sectionId) {
     const api = _sections().find(({ section }) => section.dataset.accordionId === sectionId || section.id === sectionId);
     if (!api) return;
     for (const { section } of _sections()) {
-      if (section !== api.section) _setOpen(section, false);
+      if (section !== api.section && !_isForcedOpen(section)) _setOpen(section, false);
     }
     _setOpen(api.section, true);
     _saveState(api.section.dataset.accordionId || api.section.id || '');
@@ -1297,23 +1328,28 @@ export function initAccordionSections(root, {
     const nextOpen = desired?.section || visibleSections[0].section;
 
     for (const { section } of visibleSections) {
-      _setOpen(section, section === nextOpen);
+      _setOpen(section, _isForcedOpen(section) || section === nextOpen);
     }
 
-    _saveState(nextOpen.dataset.accordionId || nextOpen.id || '');
+    const saveSection = visibleSections.find(({ section }) => !_isForcedOpen(section) && section === nextOpen)?.section
+      || visibleSections.find(({ section }) => _isForcedOpen(section))?.section
+      || nextOpen;
+    _saveState(saveSection.dataset.accordionId || saveSection.id || '');
   }
 
   function toggleSection(section) {
     const api = _ensureSection(section);
     if (!api || !_isVisible(api.section)) return;
+    if (_sectionPolicy(api.section).lockOpen || _isForcedOpen(api.section)) return;
     const isOpen = api.section.classList.contains('is-open');
     if (isOpen) {
       _setOpen(api.section, false);
-      _saveState('');
+      const forcedVisible = _sections().find(({ section }) => _isVisible(section) && _isForcedOpen(section));
+      _saveState(forcedVisible?.section?.dataset.accordionId || forcedVisible?.section?.id || '');
       return;
     }
     for (const { section: other } of _sections()) {
-      if (other !== api.section && _isVisible(other)) _setOpen(other, false);
+      if (other !== api.section && _isVisible(other) && !_isForcedOpen(other)) _setOpen(other, false);
     }
     _setOpen(api.section, true);
     _saveState(api.section.dataset.accordionId || api.section.id || '');
@@ -1332,9 +1368,17 @@ export function initAccordionSections(root, {
  * @param {Element} root          - Scope element (document or embed wrapper)
  * @param {string}  storageKey    - localStorage key for persisting section state
  * @param {string}  [defaultSectionId] - section data-sec-id to open by default
+ * @param {Record<string, {
+ *   forcePinned?: boolean,
+ *   forceOpen?: boolean,
+ *   lockPinned?: boolean,
+ *   lockOpen?: boolean,
+ *   hidePinControl?: boolean,
+ *   hideChevronControl?: boolean,
+ * }>} [sectionPolicy] - per-section policy keyed by element id or section data-sec-id
  * @returns {{ unlock: Function }} Call unlock() when the first data load completes
  */
-export function initSectionAccordion(root, { storageKey, defaultSectionId = 'tree' } = {}) {
+export function initSectionAccordion(root, { storageKey, defaultSectionId = 'tree', sectionPolicy = {} } = {}) {
   let _sectionsUnlocked = false;
 
   function _loadSt() {
@@ -1347,6 +1391,28 @@ export function initSectionAccordion(root, { storageKey, defaultSectionId = 'tre
     return Array.from(root.querySelectorAll('.pt-palette-section[data-sec-id]'));
   }
 
+  function _secPolicy(sec) {
+    if (!sec) return {};
+    return sectionPolicy[sec.id] || sectionPolicy[sec.dataset.secId] || {};
+  }
+
+  function _applySectionChromePolicy(sec) {
+    if (!sec) return;
+    const policy = _secPolicy(sec);
+    const pinBtn = sec.querySelector(':scope > h3 .pt-sec-pin');
+    const chevron = sec.querySelector(':scope > h3 .pt-sec-chevron');
+    if (pinBtn) {
+      const hidePin = policy.hidePinControl || policy.forcePinned;
+      pinBtn.style.display = hidePin ? 'none' : '';
+      pinBtn.setAttribute('aria-hidden', hidePin ? 'true' : 'false');
+    }
+    if (chevron) {
+      const hideChevron = policy.hideChevronControl || policy.lockOpen || policy.forceOpen;
+      chevron.style.display = hideChevron ? 'none' : '';
+      chevron.setAttribute('aria-hidden', hideChevron ? 'true' : 'false');
+    }
+  }
+
   function _openSec(sec) {
     sec.classList.add('pt-palette-section--open');
     const st = _loadSt();
@@ -1354,6 +1420,11 @@ export function initSectionAccordion(root, { storageKey, defaultSectionId = 'tre
     _saveSt(st);
   }
   function _closeSec(sec) {
+    const policy = _secPolicy(sec);
+    if (policy.lockOpen || policy.forceOpen) {
+      _openSec(sec);
+      return;
+    }
     sec.classList.remove('pt-palette-section--open');
     const st = _loadSt();
     st[sec.dataset.secId] = { ...(st[sec.dataset.secId] || {}), open: false };
@@ -1362,6 +1433,8 @@ export function initSectionAccordion(root, { storageKey, defaultSectionId = 'tre
 
   function _toggleSec(sec) {
     if (!_sectionsUnlocked) return;
+    const policy = _secPolicy(sec);
+    if (policy.lockOpen || policy.forceOpen) return;
     if (sec.classList.contains('pt-palette-section--pinned')) return;
     if (sec.classList.contains('pt-palette-section--open')) {
       _closeSec(sec);
@@ -1376,6 +1449,8 @@ export function initSectionAccordion(root, { storageKey, defaultSectionId = 'tre
 
   function _togglePin(sec) {
     if (!_sectionsUnlocked) return;
+    const policy = _secPolicy(sec);
+    if (policy.lockPinned || policy.forcePinned) return;
     const isPinned = sec.classList.contains('pt-palette-section--pinned');
     const pinIcon  = sec.querySelector(':scope > h3 .pt-sec-pin i');
     const st       = _loadSt();
@@ -1435,6 +1510,8 @@ export function initSectionAccordion(root, { storageKey, defaultSectionId = 'tre
     h3.querySelector('.pt-sec-pin').addEventListener('click', e => {
       e.stopPropagation(); _togglePin(sec);
     });
+
+    _applySectionChromePolicy(sec);
   });
 
   if (palBody) palBody.classList.add('pt-sections-locked');
@@ -1447,8 +1524,14 @@ export function initSectionAccordion(root, { storageKey, defaultSectionId = 'tre
     const noTrans = [];
     let anyPinned = false;
     _allSec().forEach(sec => {
+      const policy = _secPolicy(sec);
       const saved = savedState[sec.dataset.secId] || {};
-      if (saved.pinned) {
+      const shouldPin = policy.forcePinned || saved.pinned;
+      const shouldOpen = policy.forceOpen || shouldPin || saved.open;
+
+      _applySectionChromePolicy(sec);
+
+      if (shouldPin) {
         anyPinned = true;
         const body = sec.querySelector(':scope > .pt-section-body');
         if (body) { body.style.transition = 'none'; noTrans.push(body); }
@@ -1456,7 +1539,11 @@ export function initSectionAccordion(root, { storageKey, defaultSectionId = 'tre
         const pi = sec.querySelector(':scope > h3 .pt-sec-pin i');
         if (pi) pi.className = 'bi bi-pin-fill';
         const pb = sec.querySelector(':scope > h3 .pt-sec-pin');
-        if (pb) pb.title = 'Unpin';
+        if (pb) pb.title = policy.lockPinned || policy.forcePinned ? 'Pinned' : 'Unpin';
+      } else if (shouldOpen) {
+        const body = sec.querySelector(':scope > .pt-section-body');
+        if (body) { body.style.transition = 'none'; noTrans.push(body); }
+        sec.classList.add('pt-palette-section--open');
       }
     });
 
