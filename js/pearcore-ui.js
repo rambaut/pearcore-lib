@@ -109,10 +109,17 @@ function _escAttr(v) {
 }
 
 function _buildPaletteLabelHTML(row = {}) {
+  if (row.hideLabel) return '';
   if (row.labelHTML) return row.labelHTML;
   const icon = row.labelIcon ? ` <i class="${row.labelIcon}"></i>` : '';
   const text = row.label != null ? _escAttr(row.label) : '';
   return `<span class="pt-palette-label">${text}${icon}</span>`;
+}
+
+function buildPaletteSubheadHTML(item = {}) {
+  const cls = _escAttr(item.className || 'pt-palette-subhead');
+  const text = _escAttr(item.text || '');
+  return `<div class="${cls}">${text}</div>`;
 }
 
 function _buildPaletteControlHTML(row = {}) {
@@ -197,6 +204,7 @@ function buildPaletteGroupHTML(group = {}) {
 function buildPaletteSectionItemHTML(item = {}) {
   if (typeof item === 'string') return item;
   if (!item || typeof item !== 'object') return '';
+  if (item.type === 'subhead') return buildPaletteSubheadHTML(item);
   if (item.type === 'group') return buildPaletteGroupHTML(item);
   if (item.type === 'row' || item.kind || item.controlHTML || item.labelHTML) {
     return buildPaletteRowHTML(item);
