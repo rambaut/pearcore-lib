@@ -27,7 +27,7 @@ function _fmtNum(v) {
  *                                    renderer.setAnnotationSchema(schema).
  * @returns {{ open: Function, close: Function }}
  */
-export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsChange, getTableColumns, getAnnotationPalette, onPaletteChange, getAnnotationScaleMode, onScaleModeChange, onConfigureClick }) {
+export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsChange, getTableColumns, getAnnotationPalette, onPaletteChange, getAnnotationScaleMode, onScaleModeChange, onConfigureClick, subjectLabel = 'tip names' }) {
   const overlay  = document.getElementById('curate-annot-overlay');
   const tbody    = document.getElementById('curate-annot-tbody');
   const detail   = document.getElementById('curate-annot-detail');
@@ -601,12 +601,14 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
     document.getElementById('parse-tips-missing').value = '?';
     document.getElementById('parse-tips-error').style.display = 'none';
 
-    // Populate example tip labels
+    // Populate example labels
     const graph = getGraph();
     const examplesWrap = document.getElementById('parse-tips-examples');
     const tips = graph
       ? graph.nodes.filter(n => isTip(n) && n.name != null)
       : [];
+    const headingEl = document.getElementById('parse-tips-examples-heading');
+    if (headingEl) headingEl.textContent = `Example ${subjectLabel}`;
     if (tips.length > 0) {
       const MAX = 5;
       const sample = tips.slice(0, MAX);
