@@ -305,6 +305,115 @@ export function createThemeManager({
 }
 
 
+// ── Shared UI Theme Families ───────────────────────────────────────────
+
+/**
+ * Canonical shared UI theme-family list for pearcore-based apps.
+ * Families style the application chrome; light/dark mode remains driven by
+ * `data-bs-theme` on the same root element.
+ */
+export const UI_THEME_FAMILIES = [
+  { id: 'peartree',           label: 'PearTree' },
+  { id: 'high-contrast',      label: 'High Contrast' },
+  { id: 'cerulean-inspired',  label: 'Cerulean-inspired' },
+  { id: 'flatly-inspired',    label: 'Flatly-inspired' },
+  { id: 'sandstone-inspired', label: 'Sandstone-inspired' },
+  { id: 'yeti-inspired',      label: 'Yeti-inspired' },
+];
+
+/**
+ * Create a reusable manager for UI theme families.
+ *
+ * Persistence is intentionally separate from app visual/tree settings so
+ * "Reset to defaults" flows can ignore UI family state.
+ *
+ * @param {object} opts
+ * @param {Array<{id:string,label:string}>} [opts.families] - available families
+ * @param {string} [opts.defaultFamily='peartree'] - fallback family id
+ * @param {string|null} [opts.storageKey='ui-theme-settings'] - localStorage key; null disables persistence
+ * @param {Element|Function} [opts.root] - root element or () => element
+ * @param {Function} [opts.onApply] - callback (familyId, rootElement)
+ * @returns {{ families:Array, getActiveFamily:Function, setActiveFamily:Function, restore:Function }}
+ */
+export function createUIThemeFamilyManager({
+  families = UI_THEME_FAMILIES,
+  defaultFamily = 'peartree',
+  storageKey = 'ui-theme-settings',
+  root = document.documentElement,
+  onApply,
+} = {}) {
+  const familyList = Array.isArray(families) && families.length
+    ? families.filter(f => f && typeof f.id === 'string' && f.id)
+    : UI_THEME_FAMILIES;
+  const known = new Map(familyList.map(f => [f.id, { id: f.id, label: f.label ?? f.id }]));
+
+  let _active = known.has(defaultFamily)
+    ? defaultFamily
+    : (familyList[0]?.id ?? 'peartree');
+
+  function _resolveRoot() {
+    if (typeof root === 'function') {
+      const resolved = root();
+      return resolved || document.documentElement;
+    }
+    return root || document.documentElement;
+  }
+
+  function _applyToRoot(familyId) {
+    const rootEl = _resolveRoot();
+    if (!rootEl?.setAttribute) return;
+    rootEl.setAttribute('data-ui-theme-family', familyId);
+    if (typeof onApply === 'function') onApply(familyId, rootEl);
+  }
+
+  function _persist() {
+    if (!storageKey) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({ uiThemeFamily: _active }));
+    } catch {
+      // Ignore storage errors (privacy mode, quota, etc.).
+    }
+  }
+
+  function restore() {
+    if (!storageKey) {
+      _applyToRoot(_active);
+      return _active;
+    }
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const saved = parsed?.uiThemeFamily;
+        if (typeof saved === 'string' && known.has(saved)) _active = saved;
+      }
+    } catch {
+      // Ignore parse errors and keep default family.
+    }
+    _applyToRoot(_active);
+    return _active;
+  }
+
+  function setActiveFamily(familyId, { persist = true } = {}) {
+    if (!known.has(familyId)) return _active;
+    _active = familyId;
+    _applyToRoot(_active);
+    if (persist) _persist();
+    return _active;
+  }
+
+  // Apply initial state immediately.
+  restore();
+
+  return {
+    families: familyList,
+    getActiveFamily: () => _active,
+    setActiveFamily,
+    restore,
+  };
+}
+
+
 // ── Embed Configuration Resolver ──────────────────────────────────────────
 
 /**

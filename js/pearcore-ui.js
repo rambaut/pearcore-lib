@@ -841,6 +841,113 @@ function showPromptDialog(title, msg, defaultValue = '') {
   });
 }
 
+/**
+ * Show a modal chooser dialog for selecting a UI theme family.
+ * Changes are staged locally and only committed when Apply is pressed.
+ *
+ * @param {object} opts
+ * @param {string} [opts.title='UI Theme']
+ * @param {string} [opts.message='Choose a UI theme family.']
+ * @param {Array<{id:string,label:string}>} opts.families
+ * @param {string} opts.currentFamily
+ * @returns {Promise<string|null>} Selected family id, or null on cancel.
+ */
+function showThemeFamilyDialog({
+  title = 'UI Theme',
+  message = 'Choose a UI theme family.',
+  families = [],
+  currentFamily = '',
+} = {}) {
+  return new Promise(resolve => {
+    const safeFamilies = Array.isArray(families)
+      ? families.filter(f => f && typeof f.id === 'string' && f.id)
+      : [];
+    if (!safeFamilies.length) {
+      resolve(null);
+      return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'pt-modal-overlay open';
+    overlay.style.zIndex = '1065';
+
+    const modal = document.createElement('div');
+    modal.className = 'pt-modal';
+    modal.style.width = '460px';
+    modal.style.maxWidth = 'calc(100vw - 40px)';
+
+    const optionsHtml = safeFamilies.map(f => {
+      const selected = f.id === currentFamily ? ' selected' : '';
+      return `<option value="${_escAttr(f.id)}"${selected}>${_escAttr(f.label ?? f.id)}</option>`;
+    }).join('');
+
+    modal.innerHTML = `
+      <div class="pt-modal-header">
+        <h5 class="modal-title"><i class="bi bi-circle-half me-2"></i>${_escAttr(title)}</h5>
+        <button class="pt-modal-close-btn" title="Close">&times;</button>
+      </div>
+      <div class="pt-modal-body">
+        <p style="font-size:0.82rem;color:var(--pt-text-subdued);margin-bottom:10px">${_escAttr(message)}</p>
+        <div class="pt-palette-row" style="grid-template-columns:92px 1fr;column-gap:14px">
+          <span class="pt-palette-label">Theme</span>
+          <select class="pt-palette-select" id="pt-theme-family-dialog-select">${optionsHtml}</select>
+        </div>
+      </div>
+      <div class="pt-modal-footer">
+        <button class="btn btn-sm btn-outline-secondary" id="pt-theme-family-dialog-cancel">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="pt-theme-family-dialog-apply">Apply</button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const closeBtn = modal.querySelector('.pt-modal-close-btn');
+    const selectEl = modal.querySelector('#pt-theme-family-dialog-select');
+    const cancelBtn = modal.querySelector('#pt-theme-family-dialog-cancel');
+    const applyBtn = modal.querySelector('#pt-theme-family-dialog-apply');
+
+    if (selectEl && !selectEl.value) selectEl.value = currentFamily || safeFamilies[0].id;
+    setTimeout(() => selectEl?.focus(), 20);
+
+    function cleanup(result) {
+      closeBtn?.removeEventListener('click', onCancel);
+      cancelBtn?.removeEventListener('click', onCancel);
+      applyBtn?.removeEventListener('click', onApply);
+      overlay.removeEventListener('click', onOverlayClick);
+      document.removeEventListener('keydown', onKey, true);
+      overlay.remove();
+      resolve(result);
+    }
+
+    function onApply() {
+      cleanup(selectEl?.value || currentFamily || safeFamilies[0].id);
+    }
+    function onCancel() {
+      cleanup(null);
+    }
+    function onOverlayClick(e) {
+      if (e.target === overlay) onCancel();
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onCancel();
+      }
+      if (e.key === 'Enter' && e.target === selectEl) {
+        e.preventDefault();
+        onApply();
+      }
+    }
+
+    closeBtn?.addEventListener('click', onCancel);
+    cancelBtn?.addEventListener('click', onCancel);
+    applyBtn?.addEventListener('click', onApply);
+    overlay.addEventListener('click', onOverlayClick);
+    document.addEventListener('keydown', onKey, true);
+  });
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // UI Initialisation Helpers
 // ══════════════════════════════════════════════════════════════════════════
@@ -1341,3 +1448,8 @@ window.buildPaletteSectionItemHTML = buildPaletteSectionItemHTML;
 window.buildPaletteSectionHTML = buildPaletteSectionHTML;
 window.buildPalettePanelFromDefinition = buildPalettePanelFromDefinition;
 window.buildParseLabelDialogHTML = buildParseLabelDialogHTML;
+window.showConfirmDialog = showConfirmDialog;
+window.showAlertDialog = showAlertDialog;
+window.showPromptDialog = showPromptDialog;
+window.showThemeFamilyDialog = showThemeFamilyDialog;
+window.initCoreUIBindings = initCoreUIBindings;

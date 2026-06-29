@@ -811,6 +811,114 @@
   --pt-info-input-text:  rgba(0,43,54,0.88);
 }
 
+/* ════════════════════════════════════════════════════════════════════
+ * UI THEME FAMILIES  —  data-ui-theme-family="..."
+ * Shared cross-app families in PearCore. Families style app chrome only.
+ * Light/dark mode is still controlled by data-bs-theme.
+ * ════════════════════════════════════════════════════════════════════ */
+
+/* High Contrast */
+[data-ui-theme-family="high-contrast"][data-bs-theme="dark"] {
+  --pt-bg-deepest: #000000;
+  --pt-bg: #0b0b0b;
+  --pt-bg-panel: #131313;
+  --pt-text: #ffffff;
+  --pt-text-muted: rgba(255,255,255,0.78);
+  --pt-text-subdued: rgba(255,255,255,0.82);
+  --pt-border: rgba(255,255,255,0.55);
+  --pt-border-strong: rgba(255,255,255,0.9);
+  --pt-surface: rgba(255,255,255,0.14);
+  --pt-surface-input: rgba(255,255,255,0.16);
+  --pt-surface-hover: rgba(255,255,255,0.22);
+  --pt-surface-focus: rgba(255,255,255,0.28);
+  --pt-gold: #ffd24a;
+  --pt-teal: #4cd6d0;
+}
+[data-ui-theme-family="high-contrast"][data-bs-theme="light"] {
+  --pt-bg-deepest: #ffffff;
+  --pt-bg: #fafafa;
+  --pt-bg-panel: #f2f2f2;
+  --pt-text: #111111;
+  --pt-text-muted: rgba(0,0,0,0.72);
+  --pt-text-subdued: rgba(0,0,0,0.8);
+  --pt-border: rgba(0,0,0,0.5);
+  --pt-border-strong: rgba(0,0,0,0.88);
+  --pt-surface: rgba(0,0,0,0.08);
+  --pt-surface-input: rgba(0,0,0,0.09);
+  --pt-surface-hover: rgba(0,0,0,0.14);
+  --pt-surface-focus: rgba(0,0,0,0.18);
+  --pt-gold: #8a5a00;
+  --pt-teal: #0b7b77;
+}
+
+/* Cerulean-inspired */
+[data-ui-theme-family="cerulean-inspired"][data-bs-theme="dark"] {
+  --pt-bg-deepest: #10212f;
+  --pt-bg: #163247;
+  --pt-bg-panel: #1c3e58;
+  --pt-gold: #e1b64d;
+  --pt-teal: #56b7c8;
+}
+[data-ui-theme-family="cerulean-inspired"][data-bs-theme="light"] {
+  --pt-bg-deepest: #eaf3fb;
+  --pt-bg: #f5f9fd;
+  --pt-bg-panel: #e4eef8;
+  --pt-text: #2b4356;
+  --pt-gold: #b77e1d;
+  --pt-teal: #2c8ea6;
+}
+
+/* Flatly-inspired */
+[data-ui-theme-family="flatly-inspired"][data-bs-theme="dark"] {
+  --pt-bg-deepest: #1b2a2a;
+  --pt-bg: #234040;
+  --pt-bg-panel: #2a4d4d;
+  --pt-gold: #d3b14a;
+  --pt-teal: #52b6a5;
+}
+[data-ui-theme-family="flatly-inspired"][data-bs-theme="light"] {
+  --pt-bg-deepest: #eef4f2;
+  --pt-bg: #f8fcfb;
+  --pt-bg-panel: #e5f0ed;
+  --pt-text: #334644;
+  --pt-gold: #a57b22;
+  --pt-teal: #2f8d7f;
+}
+
+/* Sandstone-inspired */
+[data-ui-theme-family="sandstone-inspired"][data-bs-theme="dark"] {
+  --pt-bg-deepest: #2d241d;
+  --pt-bg: #3b2f25;
+  --pt-bg-panel: #4a3a2d;
+  --pt-gold: #d3a45a;
+  --pt-teal: #66a89d;
+}
+[data-ui-theme-family="sandstone-inspired"][data-bs-theme="light"] {
+  --pt-bg-deepest: #f6efe7;
+  --pt-bg: #fbf6ef;
+  --pt-bg-panel: #efe5d9;
+  --pt-text: #4f4033;
+  --pt-gold: #9f6f2d;
+  --pt-teal: #3e857a;
+}
+
+/* Yeti-inspired */
+[data-ui-theme-family="yeti-inspired"][data-bs-theme="dark"] {
+  --pt-bg-deepest: #21262d;
+  --pt-bg: #2b313a;
+  --pt-bg-panel: #363e49;
+  --pt-gold: #d1b365;
+  --pt-teal: #69a8c6;
+}
+[data-ui-theme-family="yeti-inspired"][data-bs-theme="light"] {
+  --pt-bg-deepest: #edf1f5;
+  --pt-bg: #f8fafc;
+  --pt-bg-panel: #e2e8ef;
+  --pt-text: #3a4758;
+  --pt-gold: #98742f;
+  --pt-teal: #3b7e9d;
+}
+
 /* ── Tool palette (slides in from left) ── */
 #palette-panel {
   position: fixed;
@@ -864,7 +972,8 @@
   padding: 10px 16px 14px;
   border-top: 1px solid var(--pt-divider-panel);
 }
-#btn-reset-settings {
+#btn-reset-settings,
+#btn-ui-theme-family {
   width: 100%;
   background: none;
   border: 1px solid var(--pt-border);
@@ -876,10 +985,22 @@
   opacity: 0.6;
   transition: background 0.15s, opacity 0.15s, border-color 0.15s;
 }
+#btn-ui-theme-family {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
 #btn-reset-settings:hover {
   background: var(--pt-danger-bg);
   border-color: var(--pt-danger-border);
   color: var(--pt-brand-hover);
+  opacity: 1;
+}
+#btn-ui-theme-family:hover {
+  background: var(--pt-btn-default-bg);
+  border-color: var(--pt-btn-default-border);
+  color: var(--pt-btn-default-text);
   opacity: 1;
 }
 .pt-theme-btn {
