@@ -6,6 +6,14 @@ import { extractNewick, parseNewickTree, walkTree, valuePreview } from './tree-g
 export { parseDelimited } from './annotation-utils.js';
 
 export function parseNewick(newickString, tipNameMap = null) {
+  // Strip an optional leading [&R] / [&r] rooted-tree flag (NEXUS convention)
+  // that precedes the opening '(' of the Newick string.
+  let _rootedByFlag = false;
+  const _rMatch = newickString.match(/^\s*\[&[Rr]\]\s*/);
+  if (_rMatch) {
+    newickString = newickString.slice(_rMatch[0].length);
+    _rootedByFlag = true;
+  }
   const tokens = newickString.split(/\s*('[^']*'|"[^"]*"|;|\(|\)|,|:|=|\[&|\]|\{|\})\s*/);
   let level = 0;
   let currentNode = null;
@@ -140,6 +148,9 @@ export function parseNewick(newickString, tipNameMap = null) {
     }
   }
   if (currentNode) annotateDates(currentNode);
+
+  // Propagate the [&R] flag so fromNestedRoot can mark the graph as rooted.
+  if (_rootedByFlag && currentNode) currentNode._isRooted = true;
 
   return currentNode;
 }
@@ -277,12 +288,15 @@ export function parseNexus(nexus, { appName = 'settings' } = {}) {
         // line like: tree TREE1 = [&R] (...)
         const idx = line.indexOf('(');
         if (idx !== -1) {
+          const prefix    = line.slice(0, idx);
+          const isRooted  = /\[&[Rr]\]/.test(prefix);
           const newickStr = line.slice(idx);
           const root = parseNewick(
             newickStr,
             tipNameMap.size > 0 ? tipNameMap : null
           );
-          trees.push({ root, tipNameMap, appSettings });
+          if (isRooted && root) root._isRooted = true;
+          trees.push({ root, tipNameMap, appSettings, isRooted });
         }
       }
     }

@@ -355,11 +355,10 @@ export function fromNestedRoot(nestedRoot) {
              annotations: nestedRoot.annotations || {} };
   }
 
-  // A tree is considered explicitly rooted (and therefore not re-rootable) when
-  // the root node carries annotations — this is characteristic of trees produced
-  // by Bayesian phylogenetic programs (BEAST, MrBayes, etc.) where the root
-  // represents a biologically meaningful reconstruction, not an arbitrary outgroup.
-  const rooted = Object.keys(root.annotations).length > 0;
+  // A tree is considered explicitly rooted (and therefore not re-rootable) when:
+  //   • the root node carries annotations (BEAST/MrBayes output), OR
+  //   • the Newick/NEXUS source carried a [&R] flag (explicit rooted declaration).
+  const rooted = Object.keys(root.annotations).length > 0 || !!nestedRoot._isRooted;
 
   return {
     nodes, root, origIdToIdx,
