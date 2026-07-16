@@ -133,6 +133,115 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
 
   function _renderTable(schema) {
     const rows = [];
+    const emitted = new Set();
+
+    function pushAnnotationRow(name, def, { isSubRow = false } = {}) {
+      const isDeleted = _deleted.has(name);
+      const p         = _pending.get(name) ?? {};
+      const type      = p.dataType  ?? def.dataType;
+      const isNum     = isNumericType(type);
+
+      const obsMin = def.observedMin ?? def.min;
+      const obsMax = def.observedMax ?? def.max;
+      const scaleMin = p.min !== undefined ? p.min : def.min;
+      const scaleMax = p.max !== undefined ? p.max : def.max;
+      const boundsOverridden = p.min !== undefined || p.max !== undefined ||
+                               p._boundsMode === 'nonneg' || p._boundsMode === 'prob';
+      const boundsColor = (def.fixedBounds || boundsOverridden)
+        ? 'var(--pt-gold)' : 'var(--pt-text-subdued)';
+      const onStr = (def.onTips && def.onNodes) ? 'T+N' : (def.onTips ? 'T' : 'N');
+      const isSelected = name === _selected;
+
+      let obsCell;
+      if (isNum) {
+        obsCell = `<span style="font-family:monospace">${_fmtNum(obsMin)}</span>
+                   <span style="color:var(--pt-text-muted);padding:0 3px">…</span>
+                   <span style="font-family:monospace">${_fmtNum(obsMax)}</span>`;
+      } else if (type === 'date' && def.min != null && def.max != null) {
+        obsCell = `<span style="font-family:monospace">${esc(def.min)}</span>
+                   <span style="color:var(--pt-text-muted);padding:0 3px">…</span>
+                   <span style="font-family:monospace">${esc(def.max)}</span>`;
+      } else if (type === 'categorical' && def.values) {
+        obsCell = `<span style="color:var(--pt-text-subdued)">${def.values.length} values</span>`;
+      } else {
+        obsCell = '<span style="color:var(--pt-text-muted)">—</span>';
+      }
+
+      let boundsCell;
+      if (isNum) {
+        boundsCell = `<span style="font-family:monospace;color:${boundsColor}">${_fmtNum(scaleMin)}</span>
+                      <span style="color:var(--pt-text-muted);padding:0 3px">…</span>
+                      <span style="font-family:monospace;color:${boundsColor}">${_fmtNum(scaleMax)}</span>`;
+      } else {
+        boundsCell = '<span style="color:var(--pt-text-dim)">—</span>';
+      }
+
+      const hasPending = !isDeleted && _pending.has(name) && Object.keys(_pending.get(name)).length > 0;
+      const rowClasses = [
+        isDeleted ? 'ca-row-deleted' : '',
+        isSelected ? 'selected' : '',
+        isSubRow ? 'ca-subrow' : '',
+      ].filter(Boolean).join(' ');
+      const rowAttr = rowClasses ? ` class="${rowClasses}"` : '';
+      const delBtn  = isDeleted
+        ? `<button class="ca-del-btn ca-reinstate-btn" data-name="${esc(name)}" title="Reinstate" tabindex="-1"><i class="bi bi-arrow-counterclockwise"></i></button>`
+        : `<button class="ca-del-btn" data-name="${esc(name)}" title="Delete annotation" tabindex="-1"><i class="bi bi-trash3"></i></button>`;
+      const labelStyle = isSubRow
+        ? 'padding-left:18px;color:var(--pt-text-subdued);font-size:0.96em;'
+        : '';
+
+      rows.push(`
+        <tr data-name="${esc(name)}"${rowAttr}>
+          <td>
+            ${hasPending ? '<span class="ca-pending-dot" title="Unsaved changes"></span>' : ''}
+            <span class="ca-name" style="${labelStyle}">${esc(def.label ?? name)}</span>
+          </td>
+          <td><span class="ca-type-badge ca-type-${esc(type)}">${esc(type)}</span></td>
+          <td class="ca-center" style="color:var(--pt-text-subdued);font-size:0.72rem">${onStr}</td>
+          <td>${obsCell}</td>
+          <td>${boundsCell}</td>
+          <td class="ca-center">
+            ${def.onTips
+              ? `<input type="checkbox" class="ca-table-chk" data-name="${esc(name)}"
+                  ${_tableColumns.has(name) ? 'checked' : ''}
+                  title="Show in data table panel"
+                  style="cursor:pointer;accent-color:var(--pt-teal,#2aa198)">`
+              : `<span style="color:var(--pt-text-dim)" title="Node-only attribute">—</span>`}
+          </td>
+          <td class="ca-center">${delBtn}</td>
+        </tr>`);
+    }
+
+    function emitGroupRows(def) {
+      const orderedKeys = ['mean', 'median', 'range', 'lower', 'upper'];
+      for (const groupKey of orderedKeys) {
+        const subAnnotName = def.group?.[groupKey];
+        if (typeof subAnnotName !== 'string') continue;
+        if (emitted.has(subAnnotName)) continue;
+        const subDef = schema.get(subAnnotName);
+        if (!subDef) continue;
+        emitted.add(subAnnotName);
+        pushAnnotationRow(subAnnotName, subDef, { isSubRow: true });
+      }
+      if (Array.isArray(def.group?.hpds)) {
+        for (const { key } of def.group.hpds) {
+          if (emitted.has(key)) continue;
+          const subDef = schema.get(key);
+          if (!subDef) continue;
+          emitted.add(key);
+          pushAnnotationRow(key, subDef, { isSubRow: true });
+        }
+      }
+      for (const [groupKey, subAnnotName] of Object.entries(def.group ?? {})) {
+        if (orderedKeys.includes(groupKey) || groupKey === 'hpds' || groupKey === 'hpd') continue;
+        if (typeof subAnnotName !== 'string') continue;
+        if (emitted.has(subAnnotName)) continue;
+        const subDef = schema.get(subAnnotName);
+        if (!subDef) continue;
+        emitted.add(subAnnotName);
+        pushAnnotationRow(subAnnotName, subDef, { isSubRow: true });
+      }
+    }
 
     // ── Fixed "Names" row (always first) ──────────────────────────────────────
     rows.push(`
@@ -154,7 +263,10 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
 
     for (const [name, def] of schema) {
       if (name === 'user_colour') continue;
+      if (emitted.has(name)) continue;
       if (def.groupMember) continue;
+
+      emitted.add(name);
 
       // Built-in computed stats are read-only: show with their friendly label but
       // don't allow editing or deletion.
@@ -184,83 +296,12 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
             </td>
             <td class="ca-center"><span style="color:var(--pt-text-dim)" title="Cannot be deleted">—</span></td>
           </tr>`);
+        if (def.group) emitGroupRows(def);
         continue;
       }
 
-      const isDeleted = _deleted.has(name);
-      const p         = _pending.get(name) ?? {};
-      const type      = p.dataType  ?? def.dataType;
-      const isNum     = isNumericType(type);
-
-      // Observed range (always from original data)
-      const obsMin = def.observedMin ?? def.min;
-      const obsMax = def.observedMax ?? def.max;
-
-      // Scale range — may be overridden by bounds preset or custom values
-      const scaleMin = p.min !== undefined ? p.min : def.min;
-      const scaleMax = p.max !== undefined ? p.max : def.max;
-      const boundsOverridden = p.min !== undefined || p.max !== undefined ||
-                               p._boundsMode === 'nonneg' || p._boundsMode === 'prob';
-      const boundsColor = (def.fixedBounds || boundsOverridden)
-        ? 'var(--pt-gold)' : 'var(--pt-text-subdued)';
-
-      const onStr = (def.onTips && def.onNodes) ? 'T+N' : (def.onTips ? 'T' : 'N');
-      const isSelected = name === _selected;
-
-      // Observed column
-      let obsCell;
-      if (isNum) {
-        obsCell = `<span style="font-family:monospace">${_fmtNum(obsMin)}</span>
-                   <span style="color:var(--pt-text-muted);padding:0 3px">…</span>
-                   <span style="font-family:monospace">${_fmtNum(obsMax)}</span>`;
-      } else if (type === 'date' && def.min != null && def.max != null) {
-        obsCell = `<span style="font-family:monospace">${esc(def.min)}</span>
-                   <span style="color:var(--pt-text-muted);padding:0 3px">…</span>
-                   <span style="font-family:monospace">${esc(def.max)}</span>`;
-      } else if (type === 'categorical' && def.values) {
-        obsCell = `<span style="color:var(--pt-text-subdued)">${def.values.length} values</span>`;
-      } else {
-        obsCell = '<span style="color:var(--pt-text-muted)">—</span>';
-      }
-
-      // Scale bounds column
-      let boundsCell;
-      if (isNum) {
-        boundsCell = `<span style="font-family:monospace;color:${boundsColor}">${_fmtNum(scaleMin)}</span>
-                      <span style="color:var(--pt-text-muted);padding:0 3px">…</span>
-                      <span style="font-family:monospace;color:${boundsColor}">${_fmtNum(scaleMax)}</span>`;
-      } else {
-        boundsCell = '<span style="color:var(--pt-text-dim)">—</span>';
-      }
-
-      // Has pending changes marker
-      const hasPending = !isDeleted && _pending.has(name) && Object.keys(_pending.get(name)).length > 0;
-
-      const rowAttr = isDeleted ? ' class="ca-row-deleted"' : (isSelected ? ' class="selected"' : '');
-      const delBtn  = isDeleted
-        ? `<button class="ca-del-btn ca-reinstate-btn" data-name="${esc(name)}" title="Reinstate" tabindex="-1"><i class="bi bi-arrow-counterclockwise"></i></button>`
-        : `<button class="ca-del-btn" data-name="${esc(name)}" title="Delete annotation" tabindex="-1"><i class="bi bi-trash3"></i></button>`;
-
-      rows.push(`
-        <tr data-name="${esc(name)}"${rowAttr}>
-          <td>
-            ${hasPending ? '<span class="ca-pending-dot" title="Unsaved changes"></span>' : ''}
-            <span class="ca-name">${esc(def.label ?? name)}</span>
-          </td>
-          <td><span class="ca-type-badge ca-type-${esc(type)}">${esc(type)}</span></td>
-          <td class="ca-center" style="color:var(--pt-text-subdued);font-size:0.72rem">${onStr}</td>
-          <td>${obsCell}</td>
-          <td>${boundsCell}</td>
-          <td class="ca-center">
-            ${def.onTips
-              ? `<input type="checkbox" class="ca-table-chk" data-name="${esc(name)}"
-                  ${_tableColumns.has(name) ? 'checked' : ''}
-                  title="Show in data table panel"
-                  style="cursor:pointer;accent-color:var(--pt-teal,#2aa198)">`
-              : `<span style="color:var(--pt-text-dim)" title="Node-only attribute">—</span>`}
-          </td>
-          <td class="ca-center">${delBtn}</td>
-        </tr>`);
+      pushAnnotationRow(name, def);
+      if (def.group) emitGroupRows(def);
     }
 
     tbody.innerHTML = rows.length ? rows.join('') :
