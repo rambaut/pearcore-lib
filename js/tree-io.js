@@ -40,7 +40,7 @@ export function parseNewick(newickString, tipNameMap = null) {
         if (t.startsWith('"') || t.startsWith("'")) t = t.slice(1);
         if (t.endsWith('"')   || t.endsWith("'"))   t = t.slice(0, -1);
         if (annotationKeyNext) {
-          annotationKey = t.replace('.', '_');
+          annotationKey = t; // preserve key name including any '.' (e.g. 97.5%_HPD)
         } else {
           if (isAnnotationARange) {
             // Treat '?' and empty string as null (missing data).
@@ -186,7 +186,7 @@ function _parseTaxonLabel(raw) {
       if (t === '}')  { inRange = false; continue; }
       let val = t.replace(/^['"]|['"]$/g, '');
       if (keyNext) {
-        key = val.replace('.', '_');
+        key = val; // preserve key name including any '.' (e.g. 97.5%_HPD)
       } else {
         const num = Number(val);
         const parsed = (val === '?' || val === '') ? null : (!isNaN(num) ? num : val);

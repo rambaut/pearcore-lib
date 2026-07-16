@@ -131,10 +131,16 @@ export function makeAnnotationFormatter(def, mode = 'ticks') {
  * @returns {Omit<AnnotationDef, 'name'>}
  */
 export function inferAnnotationType(values) {
-  // ── List type: at least one value is an array ────────────────────────────
+  // ── List / interval type: at least one value is an array ────────────────
   if (values.some(v => Array.isArray(v))) {
     const elements = values.flatMap(v => Array.isArray(v) ? v : [v]);
-    return { dataType: 'list', elementType: inferAnnotationType(elements) };
+    const elementType = inferAnnotationType(elements);
+    // Flag as 'interval' when every value is a 2-element [lower, upper] numeric pair.
+    const isInterval = isNumericType(elementType.dataType) &&
+      elementType.dataType !== 'list' &&
+      values.every(v => Array.isArray(v) && v.length === 2 &&
+        typeof v[0] === 'number' && typeof v[1] === 'number' && v[0] <= v[1]);
+    return { dataType: isInterval ? 'interval' : 'list', elementType };
   }
 
   // ── Numeric types ────────────────────────────────────────────────────────
@@ -168,10 +174,10 @@ export function inferAnnotationType(values) {
 
 /**
  * BEAST suffix grouping constants — used by buildAnnotationSchema to detect
- * keys like `height_median`, `height_95%_HPD` and link them to a base key.
+ * keys like `height_median` and link them to a base key.
+ * HPD annotations (any percentage) are handled separately by a regex pass below.
  */
 const BEAST_SUFFIXES = [
-  ['_95%_HPD', 'hpd'],
   ['_median',  'median'],
   ['_range',   'range'],
   ['_mean',    'mean'],
@@ -286,6 +292,7 @@ export function buildAnnotationSchema(items, opts = {}) {
   }
 
   // ── BEAST annotation grouping ───────────────────────────────────────────
+  // Pass 1: suffix-based grouping for non-HPD BEAST annotations.
   for (const [name, def] of schema) {
     for (const [suffix, label] of BEAST_SUFFIXES) {
       if (name.endsWith(suffix)) {
@@ -302,6 +309,8 @@ export function buildAnnotationSchema(items, opts = {}) {
   }
 
   // ── Synthesize missing base keys from _mean ────────────────────────────
+  // Must run before HPD Pass 2 so that synthesised base keys (e.g. 'height'
+  // created from 'height_mean') are present when HPDs are grouped.
   {
     const orphanedBases = new Map();
     for (const name of schema.keys()) {
@@ -338,6 +347,32 @@ export function buildAnnotationSchema(items, opts = {}) {
         schema.set(k, v);
       }
     }
+  }
+
+  // Pass 2: regex-based grouping for HPD annotations with any percentage.
+  // Runs after synthesis so base keys created from _mean are already present.
+  // Matches _95%_HPD, _90%_HPD, _99%_HPD, _97.5%_HPD, _97_5%_HPD, etc.
+  // Works for any annotation base (height, rate, clock.rate, …). Case-insensitive.
+  const HPD_SUFFIX_RE = /_(\d+(?:[._]\d+)?)%_HPD$/i;
+  for (const [name, def] of schema) {
+    const m = HPD_SUFFIX_RE.exec(name);
+    if (!m) continue;
+    const base = name.slice(0, -m[0].length);
+    if (!schema.has(base)) continue;
+    const pct = parseFloat(m[1].replace('_', '.'));
+    def.groupMember = base;
+    def.label = `${pct}% HPD`;   // e.g. "95% HPD", "99% HPD"
+    const baseDef = schema.get(base);
+    baseDef.group = baseDef.group || {};
+    baseDef.group.hpds = baseDef.group.hpds || [];
+    baseDef.group.hpds.push({ pct, key: name });
+  }
+  // Resolve group.hpd to the preferred HPD: 95% if present, otherwise highest.
+  for (const [, def] of schema) {
+    if (!def.group?.hpds?.length) continue;
+    def.group.hpds.sort((a, b) => b.pct - a.pct);  // highest percentage first
+    const preferred = def.group.hpds.find(h => h.pct === 95) ?? def.group.hpds[0];
+    def.group.hpd = preferred.key;
   }
 
   return schema;
