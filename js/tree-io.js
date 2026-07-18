@@ -5,6 +5,33 @@
 import { extractNewick, parseNewickTree, walkTree, valuePreview } from './tree-graph.js';
 export { parseDelimited } from './annotation-utils.js';
 
+function _parseAnnotationValueToken(tokens, startIdx) {
+  const tok = tokens[startIdx];
+  if (tok == null) throw new Error('Unexpected end of annotation block');
+  if (tok === '{') {
+    const arr = [];
+    let idx = startIdx + 1;
+    while (idx < tokens.length) {
+      const cur = tokens[idx];
+      if (cur === ',') { idx++; continue; }
+      if (cur === '}') return { value: arr, nextIdx: idx + 1 };
+      const parsed = _parseAnnotationValueToken(tokens, idx);
+      arr.push(parsed.value);
+      idx = parsed.nextIdx;
+    }
+    throw new Error('Unbalanced braces in annotation value');
+  }
+  if (tok === '}' || tok === ',') {
+    throw new Error(`Unexpected token ${tok} in annotation value`);
+  }
+  let t = tok;
+  if (t.startsWith('"') || t.startsWith("'")) t = t.slice(1);
+  if (t.endsWith('"')   || t.endsWith("'"))   t = t.slice(0, -1);
+  if (t === '?' || t === '') return { value: null, nextIdx: startIdx + 1 };
+  const num = Number(t);
+  return { value: !isNaN(num) ? num : t, nextIdx: startIdx + 1 };
+}
+
 export function parseNewick(newickString, tipNameMap = null) {
   // Strip an optional leading [&R] / [&r] rooted-tree flag (NEXUS convention)
   // that precedes the opening '(' of the Newick string.
@@ -14,7 +41,7 @@ export function parseNewick(newickString, tipNameMap = null) {
     newickString = newickString.slice(_rMatch[0].length);
     _rootedByFlag = true;
   }
-  const tokens = newickString.split(/\s*('[^']*'|"[^"]*"|;|\(|\)|,|:|=|\[&|\]|\{|\})\s*/);
+  const tokens = newickString.split(/\s*('[^']*'|"[^"]*"|;|\(|\)|,|:|=|\[&|\]|\{|\})\s*/).filter(t => t.length > 0);
   let level = 0;
   let currentNode = null;
   let nodeStack = [];
@@ -23,45 +50,32 @@ export function parseNewick(newickString, tipNameMap = null) {
   let inAnnotation = false;
   let annotationKeyNext = true;
   let annotationKey = null;
-  let isAnnotationARange = false;
 
   let idCounter = 0;
   function newId() { return `n${idCounter++}`; }
 
-  for (const token of tokens.filter(t => t.length > 0)) {
+  for (let idx = 0; idx < tokens.length; idx++) {
+    const token = tokens[idx];
     if (inAnnotation) {
-      if (token === "=")          { annotationKeyNext = false; }
-      else if (token === ",")     { if (!isAnnotationARange) annotationKeyNext = true; }
-      else if (token === "{")     { isAnnotationARange = true; currentNode.annotations[annotationKey] = []; }
-      else if (token === "}")     { isAnnotationARange = false; }
-      else if (token === "]")     { inAnnotation = false; annotationKeyNext = true; }
-      else {
-        let t = token;
-        if (t.startsWith('"') || t.startsWith("'")) t = t.slice(1);
-        if (t.endsWith('"')   || t.endsWith("'"))   t = t.slice(0, -1);
-        if (annotationKeyNext) {
-          annotationKey = t; // preserve key name including any '.' (e.g. 97.5%_HPD)
-        } else {
-          if (isAnnotationARange) {
-            // Treat '?' and empty string as null (missing data).
-            if (t === '?' || t === '') {
-              currentNode.annotations[annotationKey].push(null);
-            } else {
-              const arrNum = Number(t);
-              currentNode.annotations[annotationKey].push(!isNaN(arrNum) ? arrNum : t);
-            }
-          } else {
-            // Treat '?' and empty string as null (missing data).
-            if (t === '?' || t === '') {
-              currentNode.annotations[annotationKey] = null;
-            } else {
-              const num = Number(t);
-              currentNode.annotations[annotationKey] = !isNaN(num) ? num : t;
-            }
-          }
-        }
+      if (token === "=") {
+        annotationKeyNext = false;
+      } else if (token === ",") {
+        annotationKeyNext = true;
+      } else if (token === "]") {
+        inAnnotation = false;
+        annotationKeyNext = true;
+      } else if (annotationKeyNext) {
+        annotationKey = token.replace(/^['"]|['"]$/g, '');
+      } else {
+        const parsed = _parseAnnotationValueToken(tokens, idx);
+        currentNode.annotations[annotationKey] = parsed.value;
+        idx = parsed.nextIdx - 1;
+        annotationKeyNext = true;
       }
-    } else if (token === "(") {
+      continue;
+    }
+
+    if (token === "(") {
       const node = { id: newId(), level, parent: currentNode, children: [], annotations: {} };
       level++;
       if (currentNode) nodeStack.push(currentNode);
@@ -176,22 +190,18 @@ function _parseTaxonLabel(raw) {
     const tokens = inner.split(/\s*(',?"[^"]*"|'[^']*'|[=,{}])\s*/);
     let keyNext = true;
     let key = null;
-    let inRange = false;
-    for (const tok of tokens) {
-      const t = tok.trim();
-      if (!t) continue;
+    const filteredTokens = tokens.map(t => t.trim()).filter(Boolean);
+    for (let idx = 0; idx < filteredTokens.length; idx++) {
+      const t = filteredTokens[idx];
       if (t === '=')  { keyNext = false; continue; }
-      if (t === ',')  { if (!inRange) keyNext = true; continue; }
-      if (t === '{')  { inRange = true; annotations[key] = []; continue; }
-      if (t === '}')  { inRange = false; continue; }
-      let val = t.replace(/^['"]|['"]$/g, '');
+      if (t === ',')  { keyNext = true; continue; }
       if (keyNext) {
-        key = val; // preserve key name including any '.' (e.g. 97.5%_HPD)
+        key = t.replace(/^['"]|['"]$/g, ''); // preserve key name including any '.' (e.g. 97.5%_HPD)
       } else {
-        const num = Number(val);
-        const parsed = (val === '?' || val === '') ? null : (!isNaN(num) ? num : val);
-        if (inRange) { annotations[key].push(parsed); }
-        else         { annotations[key] = parsed; }
+        const parsed = _parseAnnotationValueToken(filteredTokens, idx);
+        annotations[key] = parsed.value;
+        idx = parsed.nextIdx - 1;
+        keyNext = true;
       }
     }
   }

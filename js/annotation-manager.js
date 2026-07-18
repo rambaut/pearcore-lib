@@ -157,6 +157,15 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
         obsCell = `<span style="font-family:monospace">${_fmtNum(obsMin)}</span>
                    <span style="color:var(--pt-text-muted);padding:0 3px">…</span>
                    <span style="font-family:monospace">${_fmtNum(obsMax)}</span>`;
+      } else if (type === 'list' && def.curveSummary) {
+        const sameCount = def.curveSummary.countMin === def.curveSummary.countMax;
+        const countText = sameCount
+          ? `${def.curveSummary.countMin} values`
+          : `${def.curveSummary.countMin}...${def.curveSummary.countMax} values`;
+        obsCell = `<span style="font-family:monospace">${_fmtNum(def.curveSummary.xMin)}</span>
+                   <span style="color:var(--pt-text-muted);padding:0 3px">…</span>
+                   <span style="font-family:monospace">${_fmtNum(def.curveSummary.xMax)}</span>
+                   <span style="color:var(--pt-text-subdued);padding-left:8px">${countText}</span>`;
       } else if (type === 'date' && def.min != null && def.max != null) {
         obsCell = `<span style="font-family:monospace">${esc(def.min)}</span>
                    <span style="color:var(--pt-text-muted);padding:0 3px">…</span>
@@ -232,8 +241,17 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
           pushAnnotationRow(key, subDef, { isSubRow: true });
         }
       }
+      if (Array.isArray(def.group?.curves)) {
+        for (const { key } of def.group.curves) {
+          if (emitted.has(key)) continue;
+          const subDef = schema.get(key);
+          if (!subDef) continue;
+          emitted.add(key);
+          pushAnnotationRow(key, subDef, { isSubRow: true });
+        }
+      }
       for (const [groupKey, subAnnotName] of Object.entries(def.group ?? {})) {
-        if (orderedKeys.includes(groupKey) || groupKey === 'hpds' || groupKey === 'hpd') continue;
+        if (orderedKeys.includes(groupKey) || groupKey === 'hpds' || groupKey === 'hpd' || groupKey === 'curves' || groupKey === 'curve') continue;
         if (typeof subAnnotName !== 'string') continue;
         if (emitted.has(subAnnotName)) continue;
         const subDef = schema.get(subAnnotName);

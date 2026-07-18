@@ -233,6 +233,43 @@ export function buildAnnotationSchema(items, opts = {}) {
     }
     if (values.length > 0) {
       const def = { name, onTips, onNodes, ...inferAnnotationType(values) };
+
+      // Summarize KDE-like curve annotations (array of [x,y] points) so UI tables
+      // can show compact metadata instead of raw arrays.
+      if (def.dataType === 'list' && /_kde$/i.test(name)) {
+        let xMin = Infinity;
+        let xMax = -Infinity;
+        let countMin = Infinity;
+        let countMax = -Infinity;
+        let seenAny = false;
+        for (const v of values) {
+          if (!Array.isArray(v)) continue;
+          let n = 0;
+          for (const pt of v) {
+            if (!Array.isArray(pt) || pt.length < 2) continue;
+            const x = +pt[0];
+            const y = +pt[1];
+            if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+            n += 1;
+            if (x < xMin) xMin = x;
+            if (x > xMax) xMax = x;
+            seenAny = true;
+          }
+          if (n > 0) {
+            if (n < countMin) countMin = n;
+            if (n > countMax) countMax = n;
+          }
+        }
+        if (seenAny) {
+          def.curveSummary = {
+            xMin,
+            xMax,
+            countMin: Number.isFinite(countMin) ? countMin : 0,
+            countMax: Number.isFinite(countMax) ? countMax : 0,
+          };
+        }
+      }
+
       // Override min/max with well-known fixed bounds when they exist, so the
       // colour scale always spans the full canonical range (e.g. 0–1 for posterior).
       const knownKey = [...KNOWN_ANNOTATION_BOUNDS.keys()]
@@ -373,6 +410,27 @@ export function buildAnnotationSchema(items, opts = {}) {
     def.group.hpds.sort((a, b) => b.pct - a.pct);  // highest percentage first
     const preferred = def.group.hpds.find(h => h.pct === 95) ?? def.group.hpds[0];
     def.group.hpd = preferred.key;
+  }
+
+  // ── KDE / curve grouping ───────────────────────────────────────────────
+  // Keys like height_KDE are treated as curve-style annotations for node bars.
+  const KDE_SUFFIX_RE = /_(kde)$/i;
+  for (const [name, def] of schema) {
+    const m = KDE_SUFFIX_RE.exec(name);
+    if (!m) continue;
+    const base = name.slice(0, -m[0].length);
+    if (!schema.has(base)) continue;
+    def.groupMember = base;
+    def.label = 'KDE';
+    const baseDef = schema.get(base);
+    baseDef.group = baseDef.group || {};
+    baseDef.group.curves = baseDef.group.curves || [];
+    baseDef.group.curves.push({ key: name, label: 'KDE' });
+  }
+
+  for (const [, def] of schema) {
+    if (!def.group?.curves?.length) continue;
+    def.group.curve = def.group.curves[0].key;
   }
 
   return schema;
