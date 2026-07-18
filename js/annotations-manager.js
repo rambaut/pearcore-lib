@@ -499,6 +499,22 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
             + `</div>`;
     }
 
+    // KDE curve summary (list type): compact info instead of raw point arrays.
+    if (currentType === 'list' && def.curveSummary) {
+      const sameCount = def.curveSummary.countMin === def.curveSummary.countMax;
+      const countText = sameCount
+        ? `${def.curveSummary.countMin} values`
+        : `${def.curveSummary.countMin}...${def.curveSummary.countMax} values`;
+      html += `<div class="ca-section-lbl" style="margin-top:10px">KDE summary</div>`
+            + `<div class="ca-row">`
+            + `<label class="ca-row-lbl">Height range</label>`
+            + `<span class="ca-mono" style="margin-right:16px">${esc(_fmtNum(def.curveSummary.xMin))}</span>`
+            + `<span style="color:var(--pt-text-muted);padding:0 6px">…</span>`
+            + `<span class="ca-mono" style="margin-right:16px">${esc(_fmtNum(def.curveSummary.xMax))}</span>`
+            + `<span class="ca-hint">${countText}</span>`
+            + `</div>`;
+    }
+
     // Bounds (numeric only)
     if (isNumeric) {
       if (currentType === 'proportion' || currentType === 'percentage') {
