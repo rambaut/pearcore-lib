@@ -114,8 +114,8 @@ export function createGraphicsExporter({
         ? `<div class="expg-row">
         <span class="expg-label">View</span>
         <div class="expg-radios">
-          <label class="expg-radio"><input type="radio" name="${prefix}-view" value="current" checked>&nbsp;Current view</label>
-          <label class="expg-radio"><input type="radio" name="${prefix}-view" value="full">&nbsp;${fullViewLabel}</label>
+          <label class="expg-radio"><input type="radio" name="${prefix}-view" value="full" checked>&nbsp;${fullViewLabel}</label>
+          <label class="expg-radio"><input type="radio" name="${prefix}-view" value="current">&nbsp;Current view</label>
         </div>
       </div>`
         : '') +
