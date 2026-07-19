@@ -116,6 +116,45 @@ export async function setupTauriAdapter({
     };
   }
 
+  // ── External link handling ─────────────────────────────────────────────
+  // In Tauri, ensure web links open in the user's default browser rather
+  // than navigating inside this app webview.
+  const openExternal = (url) => {
+    if (!url) return;
+    invoke('open_external_url', { url }).catch(err => {
+      console.error('[tauri] open_external_url failed', err);
+    });
+  };
+
+  const shouldOpenExternally = (href) => {
+    try {
+      const u = new URL(href, window.location.href);
+      return ['http:', 'https:', 'mailto:'].includes(u.protocol);
+    } catch {
+      return false;
+    }
+  };
+
+  document.addEventListener('click', (e) => {
+    const a = e.target?.closest?.('a[href]');
+    if (!a) return;
+    if (a.hasAttribute('download')) return;
+    const hrefAttr = a.getAttribute('href') || '';
+    if (!shouldOpenExternally(hrefAttr)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openExternal(a.href);
+  }, true);
+
+  const originalWindowOpen = window.open.bind(window);
+  window.open = (url, target, features) => {
+    if (typeof url === 'string' && shouldOpenExternally(url)) {
+      openExternal(url);
+      return null;
+    }
+    return originalWindowOpen(url, target, features);
+  };
+
   // ── Auto-update ────────────────────────────────────────────────────────
   const updateCmd = registry.get('check-for-updates');
   if (updateCmd) {
