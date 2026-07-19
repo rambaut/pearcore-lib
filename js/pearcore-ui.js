@@ -715,6 +715,7 @@ function buildStatusBarHTML(opts = {}) {
 function buildHelpAboutHTML(opts = {}) {
   const showHelp  = opts.help  !== false;
   const showAbout = opts.about !== false;
+  const helpManualUrl = opts.helpManualUrl || '';
   if (!showHelp && !showAbout) return '';
   const helpTitle  = opts.helpTitle  || 'Help';
   const aboutTitle = opts.aboutTitle || 'About';
@@ -726,6 +727,7 @@ function buildHelpAboutHTML(opts = {}) {
     <select id="help-jump-select" aria-label="Jump to help section" title="Jump to section" style="display:none">
       <option value="">Jump to section...</option>
     </select>
+    ${helpManualUrl ? `<a id="btn-help-manual" href="${helpManualUrl}" target="_blank" rel="noopener noreferrer" title="Open the manual">See manual…</a>` : ''}
     <button id="btn-help-close" title="Close help">&times;</button>
   </div>
   <div id="help-panel-body">
@@ -1146,6 +1148,8 @@ function initDarkModeToggle(root, opts = {}) {
  * @param {Function} opts.fetchContent - async (filename) => markdown string
  * @param {string}  [opts.helpFile]    - filename to fetch for help (default 'help.md')
  * @param {string}  [opts.aboutFile]   - filename to fetch for about (default 'about.md')
+ * @param {string}  [opts.helpManualUrl] - base URL for the manual link
+ * @param {object}  [opts.helpManualAnchors] - map from help section title to manual anchor
  * @returns {{ openHelp, closeHelp, openAbout, closeAbout }}
  */
 function initHelpAbout(root, opts = {}) {
@@ -1156,10 +1160,33 @@ function initHelpAbout(root, opts = {}) {
   const helpPanelBody = $('help-panel-body');
   const helpContent  = $('help-content');
   const helpJumpSelect = $('help-jump-select');
+  const btnHelpManual = $('btn-help-manual');
   const btnHelp      = $('btn-help');
   const btnHelpClose = $('btn-help-close');
   let helpLoaded = false;
   if (helpPanel) helpPanel.inert = true;
+  const helpManualUrl = opts.helpManualUrl || '';
+  const helpManualAnchors = opts.helpManualAnchors || {};
+
+  function _currentHelpSectionTitle() {
+    const selected = helpJumpSelect?.selectedOptions?.[0];
+    const title = selected?.textContent?.trim();
+    if (title && title !== 'Jump to section...') return title;
+    return helpContent?.querySelector('h2')?.textContent?.trim() || 'Interface Overview';
+  }
+
+  function _syncHelpManualLink() {
+    if (!btnHelpManual) return;
+    if (!helpManualUrl) {
+      btnHelpManual.classList.add('d-none');
+      return;
+    }
+    btnHelpManual.classList.remove('d-none');
+    const sectionTitle = _currentHelpSectionTitle();
+    const anchor = helpManualAnchors[sectionTitle] || '';
+    btnHelpManual.href = `${helpManualUrl}${anchor}`;
+    btnHelpManual.title = `Open the manual for ${sectionTitle}`;
+  }
 
   function _slugifyHeading(text) {
     return String(text || '')
@@ -1206,6 +1233,7 @@ function initHelpAbout(root, opts = {}) {
     }
     helpJumpSelect.disabled = false;
     helpJumpSelect.style.display = '';
+    _syncHelpManualLink();
   }
 
   // ── About panel ─────────────────────────────────────────────────────────
@@ -1233,6 +1261,7 @@ function initHelpAbout(root, opts = {}) {
     helpPanel.classList.add('open');
     helpPanel.inert = false;
     btnHelp?.classList.add('active');
+    _syncHelpManualLink();
   }
 
   function closeHelp() {
@@ -1274,11 +1303,18 @@ function initHelpAbout(root, opts = {}) {
   if (helpJumpSelect) {
     helpJumpSelect.addEventListener('change', () => {
       const id = helpJumpSelect.value;
-      if (!id) return;
+      if (!id) {
+        _syncHelpManualLink();
+        return;
+      }
       const target = helpContent?.querySelector(`#${CSS.escape(id)}`);
-      if (!target) return;
+      if (!target) {
+        _syncHelpManualLink();
+        return;
+      }
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
       if (helpPanelBody) helpPanelBody.focus?.();
+      _syncHelpManualLink();
     });
   }
   if (btnAbout)     btnAbout.addEventListener('click', e => { e.stopPropagation(); aboutPanel?.classList.contains('open') ? closeAbout() : openAbout(); });
@@ -1324,6 +1360,8 @@ function initToolbarHeight(root) {
  * @param {boolean}  [opts.aboutEnabled]
  * @param {string}   [opts.helpFile]
  * @param {string}   [opts.aboutFile]
+ * @param {string}   [opts.helpManualUrl]
+ * @param {object}   [opts.helpManualAnchors]
  *
  * Dark-mode options:
  * @param {string}  [opts.theme]
@@ -1359,6 +1397,8 @@ function initCoreUIBindings(root, opts = {}) {
     fetchContent: opts.fetchContent,
     helpFile:     opts.helpFile,
     aboutFile:    opts.aboutFile,
+    helpManualUrl: opts.helpManualUrl,
+    helpManualAnchors: opts.helpManualAnchors,
   });
 
   // ── Dark-mode toggle ───────────────────────────────────────────────────

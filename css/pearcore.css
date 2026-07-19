@@ -524,6 +524,24 @@
   margin: 0;
   letter-spacing: 0.3px;
 }
+#btn-help-manual {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--pt-border-input);
+  border-radius: 4px;
+  color: var(--pt-off-white);
+  background: var(--pt-surface-input);
+  font-size: 0.66rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+#btn-help-manual:hover {
+  border-color: var(--pt-border-strong);
+  color: var(--pt-cream);
+  background: var(--pt-surface-hover);
+}
 #btn-help-close {
   margin-left: auto;
   background: none;
