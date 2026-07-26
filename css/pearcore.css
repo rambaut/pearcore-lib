@@ -218,7 +218,7 @@
 .pt-fcp-item:hover { background: var(--pt-surface-hover); }
 .pt-fcp-item.active { color: var(--pt-gold); }
 .pt-filter-input {
-  width: 150px;
+  width: 100px;
   height: 100%;
   padding: 1px 6px;
   font-size: 0.75rem;
