@@ -106,6 +106,7 @@ export function parseNewick(newickString, tipNameMap = null) {
         lengthNext = false;
       } else if (labelNext) {
         currentNode.label = token;
+        if (currentNode.parent == null) currentNode._isRooted = true;
         if (!token.startsWith("#")) {
           // Store raw value under a temporary key; the caller will rename it
           // once the user has chosen an annotation name.

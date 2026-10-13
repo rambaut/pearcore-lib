@@ -247,6 +247,8 @@ export function fromNestedRoot(nestedRoot) {
 
   const rootChildren    = nestedRoot.children || [];
   const hasRootAnnotations = Object.keys(nestedRoot.annotations || {}).length > 0;
+  const hasRootLabel = !!nestedRoot.label || !!nestedRoot.name;
+  const isRooted = !!nestedRoot._isRooted || hasRootAnnotations || hasRootLabel;
   // Treat a bifurcating root as "virtual" only when it carries no annotations.
   // An annotated root (e.g. BEAST output) is a real biological node and must be
   // included in nodes[] so its annotations are visible and the tree is non-rerooted.
@@ -355,15 +357,17 @@ export function fromNestedRoot(nestedRoot) {
              annotations: nestedRoot.annotations || {} };
   }
 
-  // A tree is considered explicitly rooted (and therefore not re-rootable) when:
-  //   • the root node carries annotations (BEAST/MrBayes output), OR
-  //   • the Newick/NEXUS source carried a [&R] flag (explicit rooted declaration).
-  const rooted = Object.keys(root.annotations).length > 0 || !!nestedRoot._isRooted;
+  // Rootedness is tracked explicitly on the graph so the UI can distinguish
+  // between "rooted but not time-calibrated" and "time tree" states.
+  const rooted = isRooted;
 
   return {
     nodes, root, origIdToIdx,
     annotationSchema: buildAnnotationSchema(nodes),
     rooted,
+    isRooted: rooted,
+    rootedAsLoaded: rooted,
+    isTimeTree: false,
     hiddenNodeIds:      new Set(),
     // Map<origId, { colour: string|null, tipCount: number }>
     // Entries here cause computeLayoutFromGraph to stop traversal at the node,
