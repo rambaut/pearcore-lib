@@ -4,7 +4,7 @@
 // `.annotations` and `.name` properties plus an `isTip` classifier.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { makeAnnotationFormatter, buildAnnotationSchema, isNumericType } from './annotation-utils.js';
+import { makeAnnotationFormatter, buildAnnotationSchema, isNumericType, isNumericAnnotationToken, coerceNumericAnnotationValues } from './annotation-utils.js';
 import { CATEGORICAL_PALETTES, SEQUENTIAL_PALETTES,
          DEFAULT_CATEGORICAL_PALETTE, DEFAULT_SEQUENTIAL_PALETTE,
          allCategoricalPalettes, allSequentialPalettes } from './palettes.js';
@@ -582,8 +582,37 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
     });
 
     // Type
-    document.getElementById('cd-type')?.addEventListener('change', e => {
-      _mutPending(name, { dataType: e.target.value });
+    document.getElementById('cd-type')?.addEventListener('change', async e => {
+      const nextType = e.target.value;
+      const graph = getGraph();
+      const def = graph?.annotationSchema?.get(name);
+      if (!graph || !def) return;
+
+      if (isNumericType(nextType)) {
+        const rawValues = graph.nodes
+          .filter(node => Object.prototype.hasOwnProperty.call(node.annotations ?? {}, name))
+          .map(node => node.annotations[name])
+          .filter(v => v != null && v !== '' && v !== '?');
+        const coerced = coerceNumericAnnotationValues(rawValues);
+        if (coerced === null) {
+          const sample = [...new Set(rawValues.map(v => String(v)))].slice(0, 3).map(v => `"${v}"`).join(', ');
+          const msg = `Cannot convert "${name}" to a numeric type because some values are not fully numeric (${sample || 'no sample'}).`;
+          if (typeof showAlertDialog === 'function') {
+            await showAlertDialog('Numeric conversion failed', msg);
+          } else {
+            window.alert(msg);
+          }
+          e.target.value = def.dataType;
+          return;
+        }
+        for (const node of graph.nodes) {
+          const v = node.annotations?.[name];
+          if (v == null || v === '' || v === '?') continue;
+          node.annotations[name] = Number(String(v).trim());
+        }
+      }
+
+      _mutPending(name, { dataType: nextType });
       _rerender(name);
     });
 
@@ -752,8 +781,22 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
       }
     }
 
-    // Parse values according to type hint, respecting the missing sentinel
+    // Parse values according to type hint, respecting the missing sentinel.
+    // Numeric coercion must succeed for every non-missing value before we accept
+    // the type hint, so strings like "123/456" stay categorical instead of
+    // being partially converted to the first number.
     const parseErrors = [];
+    if (typeHint === 'integer' || typeHint === 'real') {
+      const rawValues = extracted
+        .filter(item => item.raw != null && !(missingStr !== '' && item.raw === missingStr))
+        .map(item => item.raw);
+      const invalidValues = rawValues.filter(v => !isNumericAnnotationToken(v));
+      if (invalidValues.length > 0) {
+        const sample = [...new Set(invalidValues)].slice(0, 3).map(v => `"${v}"`).join(', ');
+        _showParseError(`Cannot parse as ${typeHint}: ${sample}${invalidValues.length > 3 ? ', …' : ''}`);
+        return;
+      }
+    }
     for (const e of extracted) {
       // Treat as missing if the field was absent or matches the missing sentinel
       if (e.raw === null || (missingStr !== '' && e.raw === missingStr)) {
@@ -761,11 +804,11 @@ export function createAnnotCurator({ getGraph, onApply, isTip, onTableColumnsCha
         continue;
       }
       if (typeHint === 'integer') {
-        const n = parseInt(e.raw, 10);
-        if (isNaN(n)) { parseErrors.push(e.raw); } else { e.value = n; }
+        const n = Number(e.raw);
+        if (!Number.isFinite(n) || !Number.isInteger(n)) { parseErrors.push(e.raw); } else { e.value = n; }
       } else if (typeHint === 'real') {
-        const n = parseFloat(e.raw);
-        if (isNaN(n)) { parseErrors.push(e.raw); } else { e.value = n; }
+        const n = Number(e.raw);
+        if (!Number.isFinite(n)) { parseErrors.push(e.raw); } else { e.value = n; }
       } else {
         e.value = e.raw; // string for auto / categorical / date
       }

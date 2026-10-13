@@ -56,6 +56,47 @@ export function isNumericType(dt) {
   return dt === 'real' || dt === 'integer' || dt === 'proportion' || dt === 'percentage';
 }
 
+/**
+ * Return true only when a value is a single numeric token, not a mixed string.
+ * This intentionally rejects strings like '123/456' or '12,345', even though
+ * they contain numeric-looking substrings.
+ *
+ * @param {any} value
+ * @returns {boolean}
+ */
+export function isNumericAnnotationToken(value) {
+  if (value == null) return false;
+  const text = String(value).trim();
+  if (text === '' || text === '?') return false;
+  if (!/^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/.test(text)) return false;
+  const num = Number(text);
+  return Number.isFinite(num);
+}
+
+/**
+ * Coerce a list of raw values to numbers only when every non-missing value is a
+ * full numeric token. Missing values (null, '', '?') are ignored so partially
+ * populated annotations can still be treated as numeric if the remaining values
+ * are all valid.
+ *
+ * Returns an array of numbers on success, or null when any non-missing value is
+ * not fully coercible (e.g. '123/456').
+ *
+ * @param {any[]} values
+ * @returns {number[]|null}
+ */
+export function coerceNumericAnnotationValues(values) {
+  if (!Array.isArray(values)) return null;
+  const coerced = [];
+  for (const raw of values) {
+    if (raw == null || raw === '' || raw === '?') continue;
+    const text = String(raw).trim();
+    if (!isNumericAnnotationToken(text)) return null;
+    coerced.push(Number(text));
+  }
+  return coerced;
+}
+
 // ── Date utilities ────────────────────────────────────────────────────────
 
 export const DATE_FULL_RE  = /^\d{4}-\d{2}-\d{2}$/;
@@ -144,14 +185,12 @@ export function inferAnnotationType(values) {
   }
 
   // ── Numeric types ────────────────────────────────────────────────────────
-  const numericValues = values.filter(v => typeof v === 'number' && !Number.isNaN(v));
-  if (numericValues.length === values.length) {
+  const coercedNumericValues = coerceNumericAnnotationValues(values);
+  if (coercedNumericValues !== null) {
     // Avoid Math.min/max spread — large annotation arrays overflow the argument stack.
     let min = Infinity, max = -Infinity;
-    for (const v of numericValues) { if (v < min) min = v; if (v > max) max = v; }
-    const allInteger = numericValues.every(v => Number.isInteger(v));
-    // observedMin/Max preserve the actual data range; min/max may be overridden later
-    // by KNOWN_ANNOTATION_BOUNDS (e.g. posterior always 0–1).
+    for (const v of coercedNumericValues) { if (v < min) min = v; if (v > max) max = v; }
+    const allInteger = coercedNumericValues.every(v => Number.isInteger(v));
     return { dataType: allInteger ? 'integer' : 'real', min, max, observedMin: min, observedMax: max };
   }
 
